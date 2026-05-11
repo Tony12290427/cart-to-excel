@@ -64,6 +64,16 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
 <body>
 <div class="container">
   <h1>HKUST Robotics Team - Order Form Generator</h1>
+  <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 200px;">
+      <label style="font-size: 13px; color: #666;">Competition</label>
+      <input id="input-competition" type="text" placeholder="e.g. MATE ROV 2026" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+    </div>
+    <div style="flex: 1; min-width: 200px;">
+      <label style="font-size: 13px; color: #666;">Name of Student</label>
+      <input id="input-student" type="text" placeholder="e.g. Chan Tai Man" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+    </div>
+  </div>
   <div id="paste-area">
     <div class="paste-zone" id="paste-zone">
       <div class="hint">📋 Ctrl+V 粘贴淘宝购物车内容到这里</div>
@@ -173,6 +183,11 @@ function parseItemBlock(block) {
 }
 
 function parseClipboardText(plainText) {
+  // Remove object replacement characters (from inline images in clipboard)
+  plainText = plainText.replace(/￼/g, '');
+  // Remove extra blank lines (collapse 3+ blank lines to 2)
+  plainText = plainText.replace(/\n{3,}/g, '\n\n');
+
   const processed = preprocessPrice(plainText);
   const blocks = splitBlocks(processed);
   if (blocks.length === 0) return [];
@@ -365,7 +380,7 @@ function exportExcel() {
             newRows += cellXML('E', r, item.link || '', false);
             newRows += cellXML('F', r, item.quantity, true);
             newRows += cellXML('G', r, item.category || 'Others', false);
-            newRows += cellXML('H', r, price, true);
+            newRows += cellXML('H', r, price * item.quantity, true);
             newRows += cellXML('I', r, 0, true);
             newRows += cellXML('J', r, 0, true);
             newRows += cellXML('K', r, 'Pending Approval', false);
@@ -391,6 +406,26 @@ function exportExcel() {
         var row41Start = sheetXML.indexOf('<row r="41"');
         if (row11Start >= 0 && row41Start >= 0) {
           sheetXML = sheetXML.substring(0, row11Start) + newRows + sheetXML.substring(row41Start);
+        }
+
+        // Get Competition and Student Name from inputs
+        var competitionName = document.getElementById('input-competition').value.trim();
+        var studentName = document.getElementById('input-student').value.trim();
+
+        // Inject Competition name into cell B3
+        if (competitionName) {
+          var cellB3 = cellXML('B', 3, competitionName, false);
+          sheetXML = sheetXML.replace(/<c r="B3"[^/]*\/>/, '');
+          sheetXML = sheetXML.replace(/<c r="B3"[^>]*>.*?<\/c>/, '');
+          sheetXML = sheetXML.replace(/(<row r="3"[^>]*>)/, '$1' + cellB3);
+        }
+
+        // Inject Student Name into cell H66
+        if (studentName) {
+          var cellH66 = cellXML('H', 66, studentName, false);
+          sheetXML = sheetXML.replace(/<c r="H66"[^/]*\/>/, '');
+          sheetXML = sheetXML.replace(/<c r="H66"[^>]*>.*?<\/c>/, '');
+          sheetXML = sheetXML.replace(/(<row r="66"[^>]*>)/, '$1' + cellH66);
         }
 
         // Update the zip
