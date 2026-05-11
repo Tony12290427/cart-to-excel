@@ -119,10 +119,10 @@ function matchCategory(name, spec) {
 }
 
 // Normalize cross-line price formatting from Taobao clipboard:
-// "￥\n.\n6" appears when price spans 3 lines, "￥\n25" when price spans 2 lines
+// "￥\n29\n.\n6" (4-line) and "￥\n25" (2-line). Apply 4-line first.
 function preprocessPrice(text) {
   return text
-    .replace(/￥\s*\n\s*\.\s*\n\s*(\d+)/g, '¥$1')
+    .replace(/￥\s*\n\s*(\d+)\s*\n\s*\.\s*\n\s*(\d+)/g, '¥$1.$2')
     .replace(/￥\s*\n\s*(\d+)/g, '¥$1');
 }
 
