@@ -342,39 +342,60 @@ function exportExcel() {
     }
 
     JSZip.loadAsync(bytes).then(function(zip) {
+      // Remove auto-created directory entries not in original template
+      zip.remove('xl/');
+      zip.remove('xl/worksheets/');
+
       // Read and modify sheet1.xml
       return zip.file('xl/worksheets/sheet1.xml').async('string').then(function(sheetXML) {
-        // Remove existing data rows (r="11" through r="40")
-        sheetXML = sheetXML.replace(/<row r="(1[1-9]|[23][0-9]|40)"[^>]*>[\s\S]*?<\/row>/g, '');
-
-        // Generate new rows
+        // Generate new rows for ALL 30 slots (rows 11-40), preserving template format
         var newRows = '';
-        items.forEach(function(item, idx) {
-          var row = 11 + idx;
-          if (row > 40) return;
+        for (var r = 11; r <= 40; r++) {
+          var idx = r - 11;
+          var item = idx < items.length ? items[idx] : null;
 
-          var displayName = item.spec
-            ? item.name + ' (' + item.spec + ')'
-            : item.name;
-          var price = item.price !== null ? item.price : 0;
+          newRows += '<row r="' + r + '" ht="20.25" customHeight="1">';
 
-          newRows += '<row r="' + row + '" ht="20.25" customHeight="1">';
-          newRows += cellXML('A', row, idx + 1, true);                    // Item no
-          newRows += cellXML('B', row, dateStr, false);                   // Date
-          newRows += cellXML('C', row, displayName, false);               // Item Name
-          newRows += cellXML('D', row, item.location || 'Online', false); // Location
-          newRows += cellXML('E', row, item.link || '', false);           // Link
-          newRows += cellXML('F', row, item.quantity, true);              // QTY
-          newRows += cellXML('G', row, item.category || 'Others', false); // Type
-          newRows += cellXML('H', row, price, true);                      // Amount CNY
-          newRows += cellXML('I', row, 0, true);                          // HKD
-          newRows += cellXML('J', row, 0, true);                          // USD
-          newRows += cellXML('K', row, 'Pending Approval', false);        // Status
+          if (item) {
+            var displayName = item.spec
+              ? item.name + ' (' + item.spec + ')'
+              : item.name;
+            var price = item.price !== null ? item.price : 0;
+
+            newRows += cellXML('A', r, idx + 1, true);
+            newRows += cellXML('B', r, dateStr, false);
+            newRows += cellXML('C', r, displayName, false);
+            newRows += cellXML('D', r, item.location || 'Online', false);
+            newRows += cellXML('E', r, item.link || '', false);
+            newRows += cellXML('F', r, item.quantity, true);
+            newRows += cellXML('G', r, item.category || 'Others', false);
+            newRows += cellXML('H', r, price, true);
+            newRows += cellXML('I', r, 0, true);
+            newRows += cellXML('J', r, 0, true);
+            newRows += cellXML('K', r, 'Pending Approval', false);
+          } else {
+            newRows += cellXML('A', r, '', false);
+            newRows += cellXML('B', r, '', false);
+            newRows += cellXML('C', r, '', false);
+            newRows += cellXML('D', r, '', false);
+            newRows += cellXML('E', r, '', false);
+            newRows += cellXML('F', r, '', false);
+            newRows += cellXML('G', r, '', false);
+            newRows += cellXML('H', r, '', false);
+            newRows += cellXML('I', r, '', false);
+            newRows += cellXML('J', r, '', false);
+            newRows += cellXML('K', r, 'Pending Approval', false);
+          }
+
           newRows += '</row>';
-        });
+        }
 
-        // Insert new rows before closing </sheetData>
-        sheetXML = sheetXML.replace('</sheetData>', newRows + '</sheetData>');
+        // Replace rows 11-40 by finding their exact positions in the XML
+        var row11Start = sheetXML.indexOf('<row r="11"');
+        var row41Start = sheetXML.indexOf('<row r="41"');
+        if (row11Start >= 0 && row41Start >= 0) {
+          sheetXML = sheetXML.substring(0, row11Start) + newRows + sheetXML.substring(row41Start);
+        }
 
         // Update the zip
         zip.file('xl/worksheets/sheet1.xml', sheetXML);
