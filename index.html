@@ -290,6 +290,74 @@ const CATEGORIES = [
   "Props", "Others"
 ];
 
+function exportExcel() {
+  if (items.length === 0) {
+    alert('没有商品数据可导出');
+    return;
+  }
+
+  try {
+    var wb = XLSX.read(TEMPLATE_B64, { type: 'base64' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+
+    var today = new Date();
+    var dateStr = (today.getMonth()+1) + '/' + today.getDate() + '/' + today.getFullYear();
+
+    items.forEach(function(item, idx) {
+      var row = 11 + idx;
+      if (row > 40) return;
+
+      var displayName = item.spec
+        ? item.name + ' (' + item.spec + ')'
+        : item.name;
+      var price = item.price !== null ? item.price : 0;
+
+      setCell(ws, row, 'A', idx + 1);
+      setCell(ws, row, 'B', dateStr);
+      setCell(ws, row, 'C', displayName);
+      setCell(ws, row, 'D', item.location || 'Online');
+      setCell(ws, row, 'E', item.link || '');
+      setCell(ws, row, 'F', item.quantity);
+      setCell(ws, row, 'G', item.category);
+      setCell(ws, row, 'H', price);
+      setCell(ws, row, 'I', 0);
+      setCell(ws, row, 'J', 0);
+      setCell(ws, row, 'K', 'Pending Approval');
+    });
+
+    // Clear remaining data rows
+    for (var r = 11 + items.length; r <= 40; r++) {
+      ['A','B','C','D','E','F','G','H','I','J','K'].forEach(function(col) {
+        var addr = col + r;
+        if (ws[addr]) {
+          if (col === 'K') {
+            ws[addr].v = 'Pending Approval';
+          } else if (col === 'I' || col === 'J') {
+            ws[addr].v = 0;
+          } else {
+            ws[addr].v = '';
+          }
+        }
+      });
+    }
+
+    var filename = 'OrderForm_' + today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.xlsx';
+    XLSX.writeFile(wb, filename);
+  } catch (err) {
+    console.error('Export failed:', err);
+    alert('导出失败，请重试。如果持续失败，可以手动复制表格数据。');
+  }
+}
+
+function setCell(ws, row, col, value) {
+  var addr = col + row;
+  if (ws[addr]) {
+    ws[addr].v = value;
+  } else {
+    ws[addr] = { t: typeof value === 'number' ? 'n' : 's', v: value };
+  }
+}
+
 function renderEditor() {
   editorArea.style.display = 'block';
   outputArea.style.display = 'block';
