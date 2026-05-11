@@ -342,10 +342,6 @@ function exportExcel() {
     }
 
     JSZip.loadAsync(bytes).then(function(zip) {
-      // Remove auto-created directory entries not in original template
-      zip.remove('xl/');
-      zip.remove('xl/worksheets/');
-
       // Read and modify sheet1.xml
       return zip.file('xl/worksheets/sheet1.xml').async('string').then(function(sheetXML) {
         // Generate new rows for ALL 30 slots (rows 11-40), preserving template format
