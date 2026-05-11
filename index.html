@@ -100,7 +100,7 @@ function parseItemBlock(block) {
   const specMatch = text.match(/(?:颜色分类|数据线|型号|规格|版本|套餐)[：:]\s*(.+)/);
   const spec = specMatch ? specMatch[1].trim() : '';
 
-  const priceMatch = text.match(/[$￥]\s*(\d+\.?\d*)/);
+  const priceMatch = text.match(/[$￥¥]\s*(\d+\.?\d*)/);
   const price = priceMatch ? parseFloat(priceMatch[1]) : null;
 
   const qtyMatches = text.match(/(?:^|\n)\s*(\d{1,2})\s*(?:\n|$)/gm);
