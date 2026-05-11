@@ -27,8 +27,8 @@ const CATEGORY_RULES = [
   { pattern: /传感器|测距|TOF|超声波|GPS|IMU|红外|避障/i, category: "EE_Electronic Sensor" },
   { pattern: /电池|锂电池|铅酸|电瓶|battery|蓄电池/i, category: "EE_Battery" },
   { pattern: /PCB|电路板|开发板/i, category: "EE_PCB" },
-  { pattern: /电阻|电容|芯片| IC\b|元件|连接器/i, category: "EE_Components" },
-  { pattern: /金属|铝|钢\b|螺丝|螺母|CNC|加工/i, category: "MECH_Metal parts/manufacture" },
+  { pattern: /电阻|电容|芯片| IC|元件|连接器/i, category: "EE_Components" },
+  { pattern: /金属|铝|钢|螺丝|螺母|CNC|加工/i, category: "MECH_Metal parts/manufacture" },
   { pattern: /碳纤维|玻纤|fibre|fiber/i, category: "MECH_Fibre parts/manufacture" },
   { pattern: /气动|气缸|pneumatic/i, category: "MECH_Pneumatic related" },
   { pattern: /3D打印|PLA|ABS|打印件|3D 打印/i, category: "MECH_3D printing related" },
@@ -48,6 +48,8 @@ function matchCategory(name, spec) {
   return "Others";
 }
 
+// Normalize cross-line price formatting from Taobao clipboard:
+// "￥\n.\n6" appears when price spans 3 lines, "￥\n25" when price spans 2 lines
 function preprocessPrice(text) {
   return text
     .replace(/￥\s*\n\s*\.\s*\n\s*(\d+)/g, '¥$1')
@@ -66,7 +68,7 @@ function splitBlocks(text) {
     const prevBlank = i === 0 || lines[i-1].trim() === '';
     const nextBlank = i === lines.length - 1 || lines[i+1].trim() === '';
 
-    if (isShopLine && prevBlank && nextBlank && lines.slice(Math.max(0,i-2), i).every(l => l.trim() === '')) {
+    if (isShopLine && prevBlank && nextBlank && i >= 2 && lines.slice(i-2, i).every(l => l.trim() === '')) {
       if (current.length > 0) {
         blocks.push({ shop: current[0], text: current.slice(1).join('\n') });
       }
@@ -76,7 +78,7 @@ function splitBlocks(text) {
     }
   }
   if (current.length > 0) {
-    if (current[0].length <= 14 && /^\S/.test(current[0])) {
+    if (current[0].length <= 14 && /^\S/.test(current[0]) && !/退货|退款|信用卡|支付|包邮|价保|假一赔/.test(current[0])) {
       blocks.push({ shop: current[0], text: current.slice(1).join('\n') });
     } else if (blocks.length > 0) {
       blocks[blocks.length - 1].text += '\n' + current.join('\n');
@@ -98,7 +100,7 @@ function parseItemBlock(block) {
   const specMatch = text.match(/(?:颜色分类|数据线|型号|规格|版本|套餐)[：:]\s*(.+)/);
   const spec = specMatch ? specMatch[1].trim() : '';
 
-  const priceMatch = text.match(/￥\s*(\d+\.?\d*)/);
+  const priceMatch = text.match(/[$￥]\s*(\d+\.?\d*)/);
   const price = priceMatch ? parseFloat(priceMatch[1]) : null;
 
   const qtyMatches = text.match(/(?:^|\n)\s*(\d{1,2})\s*(?:\n|$)/gm);
