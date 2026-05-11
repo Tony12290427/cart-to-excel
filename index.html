@@ -50,6 +50,14 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 20px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
 }
+@media (max-width: 768px) {
+  body { padding: 10px; }
+  .edit-table { font-size: 12px; }
+  .edit-table th, .edit-table td { padding: 4px; }
+  .col-name { min-width: 180px; }
+  .col-type { width: 150px; }
+  .col-link { width: 120px; }
+}
 </style>
 </head>
 <body>
@@ -66,7 +74,9 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     <div id="table-container"></div>
     <div id="summary-bar" class="summary-bar"></div>
   </div>
-  <div id="output-area" style="display:none;"></div>
+  <div id="output-area" style="display:none; margin-top: 15px; text-align: right;">
+  <button id="btn-restart" style="background: #fff; border: 1px solid #ccc; padding: 8px 16px; border-radius: 4px; cursor: pointer;">重新开始</button>
+</div>
 </div>
 <script>
 // === PARSER ===
@@ -216,6 +226,9 @@ let items = [];
 const pasteZone = document.getElementById('paste-zone');
 const pasteInput = document.getElementById('paste-input');
 const resultBar = document.getElementById('result-bar');
+
+// Bind restart button
+document.getElementById('btn-restart').addEventListener('click', clearAll);
 
 // === PASTE HANDLER ===
 pasteInput.addEventListener('paste', function(e) {
