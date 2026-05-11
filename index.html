@@ -10,12 +10,38 @@
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
 .container { max-width: 1200px; margin: 0 auto; }
 h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
+.paste-zone {
+  background: #fff; border: 2px dashed #ccc; border-radius: 8px;
+  padding: 60px 20px; text-align: center; cursor: pointer; transition: all .2s;
+}
+.paste-zone:hover { border-color: #4a90d9; background: #fafbff; }
+.paste-zone.active { border-color: #4a90d9; background: #e8f0fe; }
+.paste-zone textarea {
+  width: 100%; min-height: 200px; border: none; outline: none;
+  resize: vertical; font-size: 14px; line-height: 1.6; padding: 20px;
+}
+.paste-zone .hint { color: #999; font-size: 14px; margin-top: 10px; }
+.result-bar {
+  background: #e8f5e9; padding: 12px 20px; border-radius: 6px;
+  margin-top: 15px; display: flex; justify-content: space-between; align-items: center;
+}
+.result-bar .count { font-weight: 600; color: #2e7d32; }
+.result-bar button {
+  background: #fff; border: 1px solid #ccc; padding: 6px 16px;
+  border-radius: 4px; cursor: pointer; font-size: 14px;
+}
 </style>
 </head>
 <body>
 <div class="container">
   <h1>HKUST Robotics Team - Order Form Generator</h1>
-  <div id="paste-area"></div>
+  <div id="paste-area">
+    <div class="paste-zone" id="paste-zone">
+      <div class="hint">📋 Ctrl+V 粘贴淘宝购物车内容到这里</div>
+      <textarea id="paste-input" placeholder="在这里粘贴..."></textarea>
+    </div>
+    <div id="result-bar" class="result-bar" style="display:none;"></div>
+  </div>
   <div id="editor-area" style="display:none;"></div>
   <div id="output-area" style="display:none;"></div>
 </div>
@@ -164,7 +190,70 @@ const TEMPLATE_B64 = "UEsDBBQACAgIAMkRq1wAAAAAAAAAAAAAAAAYAAAAeGwvZHJhd2luZ3MvZH
 let items = [];
 
 // === DOM refs ===
-const pasteArea = document.getElementById('paste-area');
+const pasteZone = document.getElementById('paste-zone');
+const pasteInput = document.getElementById('paste-input');
+const resultBar = document.getElementById('result-bar');
+
+// === PASTE HANDLER ===
+pasteInput.addEventListener('paste', function(e) {
+  e.preventDefault();
+  const plainText = e.clipboardData.getData('text/plain');
+  const html = e.clipboardData.getData('text/html');
+
+  if (!plainText || plainText.trim().length === 0) {
+    showError('请先复制购物车内容 (Ctrl+A → Ctrl+C)');
+    return;
+  }
+
+  items = parseClipboardText(plainText);
+
+  if (items.length === 0) {
+    showError('未识别到商品，请确认是从购物车复制的内容');
+    return;
+  }
+
+  if (html) {
+    const links = extractLinksFromHTML(html);
+    items = assignLinks(items, links);
+  }
+
+  const totalPrice = items.reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0);
+  resultBar.innerHTML = `
+    <span class="count">已识别 ${items.length} 个商品 | 总计 ¥${totalPrice.toFixed(2)}</span>
+    <div>
+      <button onclick="clearAll()">重新开始</button>
+      <button onclick="showEditor()" style="margin-left:8px; background:#4a90d9; color:#fff; border-color:#4a90d9;">编辑确认</button>
+    </div>`;
+  resultBar.style.display = 'flex';
+  resultBar.style.background = '#e8f5e9';
+  pasteZone.style.display = 'none';
+  pasteInput.value = '';
+
+  renderEditor();
+});
+
+function showError(msg) {
+  resultBar.innerHTML = `<span style="color:#c62828;">⚠ ${msg}</span>`;
+  resultBar.style.display = 'flex';
+  resultBar.style.background = '#ffebee';
+}
+
+function clearAll() {
+  items = [];
+  pasteZone.style.display = 'block';
+  pasteInput.value = '';
+  resultBar.style.display = 'none';
+  editorArea.style.display = 'none';
+  outputArea.style.display = 'none';
+  if (document.getElementById('table-container')) {
+    document.getElementById('table-container').innerHTML = '';
+  }
+}
+
+function showEditor() {
+  editorArea.scrollIntoView({ behavior: 'smooth' });
+}
+
 const editorArea = document.getElementById('editor-area');
 const outputArea = document.getElementById('output-area');
 
