@@ -30,6 +30,26 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   background: #fff; border: 1px solid #ccc; padding: 6px 16px;
   border-radius: 4px; cursor: pointer; font-size: 14px;
 }
+.edit-table { width: 100%; border-collapse: collapse; margin: 20px 0; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.edit-table th { background: #fff9c4; padding: 10px 8px; font-size: 12px; text-align: left; border-bottom: 2px solid #e0e0e0; color: #555; }
+.edit-table td { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.edit-table input, .edit-table select { width: 100%; padding: 4px 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 13px; }
+.edit-table input:focus, .edit-table select:focus { outline: none; border-color: #4a90d9; }
+.edit-table .low-confidence { border-color: #ff9800; background: #fff8e1; }
+.edit-table .col-num { width: 40px; text-align: center; }
+.edit-table .col-name { min-width: 300px; }
+.edit-table .col-qty { width: 60px; }
+.edit-table .col-price { width: 80px; }
+.edit-table .col-type { width: 200px; }
+.edit-table .col-link { width: 200px; }
+.edit-table .col-del { width: 40px; text-align: center; }
+.edit-table .btn-del {
+  background: none; border: none; color: #c62828; cursor: pointer; font-size: 16px;
+}
+.summary-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
+}
 </style>
 </head>
 <body>
@@ -42,7 +62,10 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     </div>
     <div id="result-bar" class="result-bar" style="display:none;"></div>
   </div>
-  <div id="editor-area" style="display:none;"></div>
+  <div id="editor-area" style="display:none;">
+    <div id="table-container"></div>
+    <div id="summary-bar" class="summary-bar"></div>
+  </div>
   <div id="output-area" style="display:none;"></div>
 </div>
 <script>
@@ -256,6 +279,98 @@ function showEditor() {
 
 const editorArea = document.getElementById('editor-area');
 const outputArea = document.getElementById('output-area');
+
+const CATEGORIES = [
+  "EE_Motor/ESC related", "EE_Electronic Sensor", "EE_Battery", "EE_PCB",
+  "EE_Components", "EE_Miscellaneous",
+  "MECH_Metal parts/manufacture", "MECH_Fibre parts/manufacture",
+  "MECH_Pneumatic related", "MECH_3D printing related",
+  "MECH_Components", "MECH_Miscellaneous",
+  "SW_MCU related", "SW_Sensors", "SW_Miscellaneous",
+  "Props", "Others"
+];
+
+function renderEditor() {
+  editorArea.style.display = 'block';
+  outputArea.style.display = 'block';
+
+  var html = '<table class="edit-table"><thead><tr>';
+  html += '<th class="col-num">#</th>';
+  html += '<th class="col-name">Item Name</th>';
+  html += '<th class="col-qty">QTY</th>';
+  html += '<th class="col-price">¥</th>';
+  html += '<th class="col-type">Type</th>';
+  html += '<th class="col-link">Link</th>';
+  html += '<th class="col-del"></th>';
+  html += '</tr></thead><tbody>';
+
+  items.forEach(function(item, idx) {
+    var displayName = item.spec
+      ? (item.name + ' (' + item.spec + ')')
+      : item.name;
+    var priceClass = item.price === null ? 'low-confidence' : '';
+    var categoryOptions = CATEGORIES.map(function(c) {
+      return '<option value="' + c + '"' + (c === item.category ? ' selected' : '') + '>' + c + '</option>';
+    }).join('');
+
+    html += '<tr data-idx="' + idx + '">';
+    html += '<td class="col-num">' + (idx + 1) + '</td>';
+    html += '<td><input type="text" value="' + escAttr(displayName) + '" class="col-name-input" data-field="displayName"></td>';
+    html += '<td class="col-qty"><input type="number" value="' + item.quantity + '" min="1" data-field="quantity"></td>';
+    html += '<td class="col-price"><input type="text" value="' + (item.price !== null ? item.price : '') + '" class="' + priceClass + '" data-field="price"></td>';
+    html += '<td class="col-type"><select data-field="category">' + categoryOptions + '</select></td>';
+    html += '<td class="col-link"><input type="text" value="' + escAttr(item.link) + '" placeholder="粘贴链接" data-field="link"></td>';
+    html += '<td class="col-del"><button class="btn-del" onclick="deleteItem(' + idx + ')" title="删除">&times;</button></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('table-container').innerHTML = html;
+
+  document.querySelectorAll('.edit-table [data-field]').forEach(function(el) {
+    el.addEventListener('change', function() {
+      var row = this.closest('tr');
+      var idx = parseInt(row.dataset.idx);
+      var field = this.dataset.field;
+      var value = this.value;
+
+      if (field === 'quantity') { value = parseInt(value) || 1; }
+      if (field === 'price') { value = parseFloat(value) || null; }
+      if (field === 'displayName') {
+        var m = value.match(/^(.+?)\s*\((.+)\)$/);
+        if (m) { items[idx].name = m[1]; items[idx].spec = m[2]; }
+        else { items[idx].name = value; items[idx].spec = ''; }
+        return;
+      }
+
+      items[idx][field] = value;
+    });
+  });
+
+  updateSummary();
+}
+
+function escAttr(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function deleteItem(idx) {
+  items.splice(idx, 1);
+  items.forEach(function(item, i) { item.id = i + 1; });
+  if (items.length === 0) {
+    clearAll();
+    return;
+  }
+  renderEditor();
+}
+
+function updateSummary() {
+  var total = items.reduce(function(sum, i) { return sum + (i.price || 0) * (i.quantity || 1); }, 0);
+  document.getElementById('summary-bar').innerHTML =
+    '<span>总计: ¥' + total.toFixed(2) + ' | ' + items.length + ' 个商品</span>' +
+    '<button id="btn-export" style="padding:10px 24px; background:#2e7d32; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer;">导出 Excel</button>';
+  document.getElementById('btn-export').addEventListener('click', exportExcel);
+}
 
 </script>
 </body>
