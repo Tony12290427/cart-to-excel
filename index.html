@@ -126,89 +126,112 @@ function preprocessPrice(text) {
     .replace(/￥\s*\n\s*(\d+)/g, '¥$1');
 }
 
-function splitBlocks(text) {
-  const lines = text.split('\n');
-  const blocks = [];
-  let current = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const isShopLine = line.length >= 3 && line.length <= 14
-      && /^\S/.test(line)
-      && !/退货|退款|信用卡|支付|包邮|价保|假一赔/.test(line);
-    const prevBlank = i === 0 || lines[i-1].trim() === '';
-    const nextBlank = i === lines.length - 1 || lines[i+1].trim() === '';
+// Classify each line into a typed token for the item-level state machine
+function classifyLine(line) {
+  var t = line.trim();
+  if (t.length === 0) return { type: 'blank' };
 
-    if (isShopLine && prevBlank && nextBlank && i >= 2 && lines.slice(i-2, i).every(l => l.trim() === '')) {
-      if (current.length > 0) {
-        blocks.push({ shop: current[0], text: current.slice(1).join('\n') });
-      }
-      current = [line];
-    } else {
-      current.push(line);
-    }
+  var skipRe = /退货|退款|信用卡|支付|包邮|价保|假一赔|运费险|优惠后|满\d+件|极速退款|不支持/;
+
+  // Shop name: short (3-14 chars), no price/skip/spec keywords, isolated
+  if (t.length >= 3 && t.length <= 14 && !/[$￥¥]/.test(t) && !skipRe.test(t)
+      && !/颜色分类|数据线|型号|规格|版本|套餐/.test(t)) {
+    return { type: 'shop', value: t };
   }
-  if (current.length > 0) {
-    if (current[0].length <= 14 && /^\S/.test(current[0]) && !/退货|退款|信用卡|支付|包邮|价保|假一赔/.test(current[0])) {
-      blocks.push({ shop: current[0], text: current.slice(1).join('\n') });
-    } else if (blocks.length > 0) {
-      blocks[blocks.length - 1].text += '\n' + current.join('\n');
-    }
+
+  // Product name: long line (>10 chars), not skip/price/spec
+  if (t.length > 10 && !skipRe.test(t) && !/^[$￥¥]/.test(t)
+      && !/颜色分类|数据线|型号|规格|版本|套餐/.test(t)) {
+    return { type: 'product', value: t };
   }
-  return blocks;
-}
 
-function parseItemBlock(block) {
-  const text = '\n' + block.text + '\n';
-  const skipPattern = /退货|退款|价保|信用卡|假一赔|包邮|满\d+件|优惠后|极速退款|支付|运费险/;
+  // Spec line: 颜色分类：xxx, 数据线：xxx, etc.
+  var specMatch = t.match(/^(?:颜色分类|数据线|型号|规格|版本|套餐)[：:]\s*(.+)/);
+  if (specMatch) return { type: 'spec', value: specMatch[1].trim() };
 
-  const lines = block.text.split('\n').filter(l => l.trim());
-  const candidateNames = lines.filter(l => l.length > 10 && !skipPattern.test(l));
-  const name = candidateNames.length > 0
-    ? candidateNames.reduce((a, b) => a.length >= b.length ? a : b, '')
-    : (lines.find(l => l.length > 10) || '');
+  // Price line: ¥25, ¥29.6, etc. (after preprocessPrice normalization)
+  var priceMatch = t.match(/^[$￥¥]\s*(\d+\.?\d*)/);
+  if (priceMatch) return { type: 'price', value: parseFloat(priceMatch[1]) };
 
-  const specMatch = text.match(/(?:颜色分类|数据线|型号|规格|版本|套餐)[：:]\s*(.+)/);
-  const spec = specMatch ? specMatch[1].trim() : '';
+  // Quantity: standalone 1-3 digit number on its own line
+  if (/^\d{1,3}$/.test(t)) return { type: 'qty', value: parseInt(t, 10) };
 
-  const priceMatch = text.match(/[$￥¥]\s*(\d+\.?\d*)/);
-  const price = priceMatch ? parseFloat(priceMatch[1]) : null;
-
-  const qtyMatches = text.match(/(?:^|\n)\s*(\d{1,2})\s*(?:\n|$)/gm);
-  const quantities = (qtyMatches || [])
-    .map(s => parseInt(s.trim()))
-    .filter(n => n >= 1 && n <= 99);
-  const quantity = quantities.length > 0 ? quantities[quantities.length - 1] : 1;
-
-  return { name: name.trim(), spec, price, quantity };
+  return { type: 'noise' };
 }
 
 function parseClipboardText(plainText) {
-  // Remove object replacement characters (from inline images in clipboard)
+  // Strip object replacement chars (inline images) and collapse 3+ blank lines
   plainText = plainText.replace(/￼/g, '');
-  // Remove extra blank lines (collapse 3+ blank lines to 2)
   plainText = plainText.replace(/\n{3,}/g, '\n\n');
 
-  const processed = preprocessPrice(plainText);
-  const blocks = splitBlocks(processed);
-  if (blocks.length === 0) return [];
+  // Normalize multi-line prices first (￥\n29\n.\n6 → ¥29.6, ￥\n25 → ¥25)
+  var processed = preprocessPrice(plainText);
 
-  return blocks.map((block, i) => {
-    const parsed = parseItemBlock(block);
-    const category = matchCategory(parsed.name, parsed.spec);
-    return {
-      id: i + 1,
-      shopName: block.shop,
-      name: parsed.name,
-      spec: parsed.spec,
-      price: parsed.price,
-      quantity: parsed.quantity,
-      link: '',
-      category: category,
-      location: 'Online',
-      confidence: parsed.price !== null && parsed.name.length > 5,
-    };
-  }).slice(0, 30);
+  // Tokenize every line
+  var allLines = processed.split('\n');
+  var tokens = [];
+  for (var i = 0; i < allLines.length; i++) {
+    var tok = classifyLine(allLines[i]);
+    tok.lineIdx = i;
+    tokens.push(tok);
+  }
+
+  // State machine: walk tokens, emit one item per 'product' line
+  var items = [];
+  var currentShop = '';
+
+  for (var i = 0; i < tokens.length; i++) {
+    var tok = tokens[i];
+
+    if (tok.type === 'shop') {
+      currentShop = tok.value;
+      continue;
+    }
+
+    if (tok.type === 'product') {
+      var item = {
+        shopName: currentShop,
+        name: tok.value,
+        spec: '',
+        price: null,
+        quantity: 1,
+      };
+
+      // Scan forward for spec, price, qty until next product/shop
+      for (var j = i + 1; j < tokens.length; j++) {
+        var next = tokens[j];
+        if (next.type === 'product' || next.type === 'shop') break;
+
+        if (next.type === 'spec' && !item.spec) {
+          item.spec = next.value;
+        } else if (next.type === 'price' && item.price === null) {
+          item.price = next.value;
+        } else if (next.type === 'qty' && item.quantity === 1) {
+          item.quantity = next.value;
+        }
+      }
+
+      var category = matchCategory(item.name, item.spec);
+      items.push({
+        id: items.length + 1,
+        shopName: item.shopName,
+        name: item.name,
+        spec: item.spec,
+        price: item.price,
+        quantity: item.quantity,
+        link: '',
+        category: category,
+        location: 'Online',
+        confidence: item.price !== null && item.name.length > 5,
+      });
+
+      if (items.length >= 30) break;
+    }
+  }
+
+  return items;
 }
+
 
 // === LINK EXTRACTION ===
 
