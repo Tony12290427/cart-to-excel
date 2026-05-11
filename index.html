@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cart to Order Form</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -303,6 +304,26 @@ const CATEGORIES = [
   "Props", "Others"
 ];
 
+// Style IDs extracted from template Row 11
+var COL_STYLES = { A:30, B:31, C:32, D:31, E:33, F:34, G:30, H:35, I:36, J:37, K:38 };
+
+function cellXML(col, row, value, isNumber) {
+  var ref = col + row;
+  var style = COL_STYLES[col];
+  if (isNumber && value !== null && value !== undefined && value !== '') {
+    return '<c r="' + ref + '" s="' + style + '"><v>' + value + '</v></c>';
+  } else if (value !== null && value !== undefined && value !== '') {
+    var escaped = String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    return '<c r="' + ref + '" s="' + style + '" t="inlineStr"><is><t>' + escaped + '</t></is></c>';
+  } else {
+    return '<c r="' + ref + '" s="' + style + '"/>';
+  }
+}
+
 function exportExcel() {
   if (items.length === 0) {
     alert('没有商品数据可导出');
@@ -310,64 +331,74 @@ function exportExcel() {
   }
 
   try {
-    var wb = XLSX.read(TEMPLATE_B64, { type: 'base64' });
-    var ws = wb.Sheets[wb.SheetNames[0]];
-
     var today = new Date();
     var dateStr = (today.getMonth()+1) + '/' + today.getDate() + '/' + today.getFullYear();
 
-    items.forEach(function(item, idx) {
-      var row = 11 + idx;
-      if (row > 40) return;
-
-      var displayName = item.spec
-        ? item.name + ' (' + item.spec + ')'
-        : item.name;
-      var price = item.price !== null ? item.price : 0;
-
-      setCell(ws, row, 'A', idx + 1);
-      setCell(ws, row, 'B', dateStr);
-      setCell(ws, row, 'C', displayName);
-      setCell(ws, row, 'D', item.location || 'Online');
-      setCell(ws, row, 'E', item.link || '');
-      setCell(ws, row, 'F', item.quantity);
-      setCell(ws, row, 'G', item.category);
-      setCell(ws, row, 'H', price);
-      setCell(ws, row, 'I', 0);
-      setCell(ws, row, 'J', 0);
-      setCell(ws, row, 'K', 'Pending Approval');
-    });
-
-    // Clear remaining data rows
-    for (var r = 11 + items.length; r <= 40; r++) {
-      ['A','B','C','D','E','F','G','H','I','J','K'].forEach(function(col) {
-        var addr = col + r;
-        if (ws[addr]) {
-          if (col === 'K') {
-            ws[addr].v = 'Pending Approval';
-          } else if (col === 'I' || col === 'J') {
-            ws[addr].v = 0;
-          } else {
-            ws[addr].v = '';
-          }
-        }
-      });
+    // Decode Base64 template
+    var binaryStr = atob(TEMPLATE_B64);
+    var bytes = new Uint8Array(binaryStr.length);
+    for (var i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
     }
 
-    var filename = 'OrderForm_' + today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.xlsx';
-    XLSX.writeFile(wb, filename);
+    JSZip.loadAsync(bytes).then(function(zip) {
+      // Read and modify sheet1.xml
+      return zip.file('xl/worksheets/sheet1.xml').async('string').then(function(sheetXML) {
+        // Remove existing data rows (r="11" through r="40")
+        sheetXML = sheetXML.replace(/<row r="(1[1-9]|[23][0-9]|40)"[^>]*>[\s\S]*?<\/row>/g, '');
+
+        // Generate new rows
+        var newRows = '';
+        items.forEach(function(item, idx) {
+          var row = 11 + idx;
+          if (row > 40) return;
+
+          var displayName = item.spec
+            ? item.name + ' (' + item.spec + ')'
+            : item.name;
+          var price = item.price !== null ? item.price : 0;
+
+          newRows += '<row r="' + row + '" ht="20.25" customHeight="1">';
+          newRows += cellXML('A', row, idx + 1, true);                    // Item no
+          newRows += cellXML('B', row, dateStr, false);                   // Date
+          newRows += cellXML('C', row, displayName, false);               // Item Name
+          newRows += cellXML('D', row, item.location || 'Online', false); // Location
+          newRows += cellXML('E', row, item.link || '', false);           // Link
+          newRows += cellXML('F', row, item.quantity, true);              // QTY
+          newRows += cellXML('G', row, item.category || 'Others', false); // Type
+          newRows += cellXML('H', row, price, true);                      // Amount CNY
+          newRows += cellXML('I', row, 0, true);                          // HKD
+          newRows += cellXML('J', row, 0, true);                          // USD
+          newRows += cellXML('K', row, 'Pending Approval', false);        // Status
+          newRows += '</row>';
+        });
+
+        // Insert new rows before closing </sheetData>
+        sheetXML = sheetXML.replace('</sheetData>', newRows + '</sheetData>');
+
+        // Update the zip
+        zip.file('xl/worksheets/sheet1.xml', sheetXML);
+
+        // Generate new xlsx
+        return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      });
+    }).then(function(blob) {
+      var filename = 'OrderForm_' + today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.xlsx';
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }).catch(function(err) {
+      console.error('Export failed:', err);
+      alert('导出失败，请重试。如果持续失败，可以手动复制表格数据。');
+    });
   } catch (err) {
     console.error('Export failed:', err);
-    alert('导出失败，请重试。如果持续失败，可以手动复制表格数据。');
-  }
-}
-
-function setCell(ws, row, col, value) {
-  var addr = col + row;
-  if (ws[addr]) {
-    ws[addr].v = value;
-  } else {
-    ws[addr] = { t: typeof value === 'number' ? 'n' : 's', v: value };
+    alert('导出失败，请重试。');
   }
 }
 
