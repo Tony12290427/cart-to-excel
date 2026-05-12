@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -66,18 +66,18 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   <h1>HKUST Robotics Team - Order Form Generator</h1>
   <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 200px;">
-      <label style="font-size: 13px; color: #666;">Competition</label>
+      <label style="font-size: 13px; color: #666;">Competition Name</label>
       <input id="input-competition" type="text" placeholder="e.g. AERC 2026" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
     </div>
     <div style="flex: 1; min-width: 200px;">
-      <label style="font-size: 13px; color: #666;">Name of Student</label>
+      <label style="font-size: 13px; color: #666;">Student Name</label>
       <input id="input-student" type="text" placeholder="e.g. Chan Tai Man" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
     </div>
   </div>
   <div id="paste-area">
     <div class="paste-zone" id="paste-zone">
-      <div class="hint">📋 Ctrl+V 粘贴淘宝购物车内容到这里</div>
-      <textarea id="paste-input" placeholder="在这里粘贴..."></textarea>
+      <div class="hint">📋 Ctrl+V to paste Taobao cart content here</div>
+      <textarea id="paste-input" placeholder="Paste here..."></textarea>
     </div>
     <div id="result-bar" class="result-bar" style="display:none;"></div>
   </div>
@@ -86,7 +86,7 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     <div id="summary-bar" class="summary-bar"></div>
   </div>
   <div id="output-area" style="display:none; margin-top: 15px; text-align: right;">
-  <button id="btn-restart" style="background: #fff; border: 1px solid #ccc; padding: 8px 16px; border-radius: 4px; cursor: pointer;">重新开始</button>
+  <button id="btn-restart" style="background: #fff; border: 1px solid #ccc; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Restart</button>
 </div>
 </div>
 <script>
@@ -288,14 +288,14 @@ pasteInput.addEventListener('paste', function(e) {
   const html = e.clipboardData.getData('text/html');
 
   if (!plainText || plainText.trim().length === 0) {
-    showError('请先复制购物车内容 (Ctrl+A → Ctrl+C)');
+    showError('Please copy cart content first (Ctrl+A → Ctrl+C)');
     return;
   }
 
   items = parseClipboardText(plainText);
 
   if (items.length === 0) {
-    showError('未识别到商品，请确认是从购物车复制的内容');
+    showError('No products found. Check you copied from the cart page.');
     return;
   }
 
@@ -306,10 +306,10 @@ pasteInput.addEventListener('paste', function(e) {
 
   const totalPrice = items.reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0);
   resultBar.innerHTML = `
-    <span class="count">已识别 ${items.length} 个商品 | 总计 ¥${totalPrice.toFixed(2)}</span>
+    <span class="count">Found ${items.length} items | Total ¥${totalPrice.toFixed(2)}</span>
     <div>
-      <button onclick="clearAll()">重新开始</button>
-      <button onclick="showEditor()" style="margin-left:8px; background:#4a90d9; color:#fff; border-color:#4a90d9;">编辑确认</button>
+      <button onclick="clearAll()">Restart</button>
+      <button onclick="showEditor()" style="margin-left:8px; background:#4a90d9; color:#fff; border-color:#4a90d9;">Review &amp; Edit</button>
     </div>`;
   resultBar.style.display = 'flex';
   resultBar.style.background = '#e8f5e9';
@@ -376,7 +376,7 @@ function cellXML(col, row, value, isNumber) {
 
 function exportExcel() {
   if (items.length === 0) {
-    alert('没有商品数据可导出');
+    alert('No items to export');
     return;
   }
 
@@ -481,11 +481,11 @@ function exportExcel() {
       URL.revokeObjectURL(url);
     }).catch(function(err) {
       console.error('Export failed:', err);
-      alert('导出失败，请重试。如果持续失败，可以手动复制表格数据。');
+      alert('Export failed. Please try again. If it keeps failing, copy the table data manually.');
     });
   } catch (err) {
     console.error('Export failed:', err);
-    alert('导出失败，请重试。');
+    alert('Export failed. Please try again.');
   }
 }
 
@@ -518,7 +518,7 @@ function renderEditor() {
     html += '<td class="col-qty"><input type="number" value="' + item.quantity + '" min="1" data-field="quantity"></td>';
     html += '<td class="col-price"><input type="text" value="' + (item.price !== null ? item.price : '') + '" class="' + priceClass + '" data-field="price"></td>';
     html += '<td class="col-type"><select data-field="category">' + categoryOptions + '</select></td>';
-    html += '<td class="col-link"><input type="text" value="' + escAttr(item.link) + '" placeholder="粘贴链接" data-field="link"></td>';
+    html += '<td class="col-link"><input type="text" value="' + escAttr(item.link) + '" placeholder="Paste link" data-field="link"></td>';
     html += '<td class="col-del"><button class="btn-del" onclick="deleteItem(' + idx + ')" title="删除">&times;</button></td>';
     html += '</tr>';
   });
@@ -566,8 +566,8 @@ function deleteItem(idx) {
 function updateSummary() {
   var total = items.reduce(function(sum, i) { return sum + (i.price || 0) * (i.quantity || 1); }, 0);
   document.getElementById('summary-bar').innerHTML =
-    '<span>总计: ¥' + total.toFixed(2) + ' | ' + items.length + ' 个商品</span>' +
-    '<button id="btn-export" style="padding:10px 24px; background:#2e7d32; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer;">导出 Excel</button>';
+    '<span>Total: ¥' + total.toFixed(2) + ' | ' + items.length + ' items</span>' +
+    '<button id="btn-export" style="padding:10px 24px; background:#2e7d32; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer;">Export Excel</button>';
   document.getElementById('btn-export').addEventListener('click', exportExcel);
 }
 
