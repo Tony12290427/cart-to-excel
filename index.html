@@ -236,16 +236,29 @@ function parseClipboardText(plainText) {
 // === LINK EXTRACTION ===
 
 function extractLinksFromHTML(html) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const links = [];
-  doc.querySelectorAll('a[href]').forEach(a => {
-    const href = a.getAttribute('href');
-    if (href && (href.includes('item.taobao.com') || href.includes('item.htm') || href.includes('detail.tmall.com'))) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(html, 'text/html');
+  var links = [];
+  doc.querySelectorAll('a[href]').forEach(function(a) {
+    var href = a.getAttribute('href');
+    if (href && (href.indexOf('item.taobao.com') >= 0 || href.indexOf('item.htm') >= 0 || href.indexOf('detail.tmall.com') >= 0)) {
       links.push(href);
     }
   });
-  return links;
+
+  // Deduplicate: cart page has both image-link and text-link per item,
+  // both pointing to same product. Remove consecutive duplicates by item ID.
+  var deduped = [];
+  var lastId = '';
+  for (var i = 0; i < links.length; i++) {
+    var m = links[i].match(/[?&]id=(\d+)/);
+    var curId = m ? m[1] : links[i];
+    if (curId !== lastId) {
+      deduped.push(links[i]);
+      lastId = curId;
+    }
+  }
+  return deduped;
 }
 
 function assignLinks(items, links) {
