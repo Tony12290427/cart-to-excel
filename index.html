@@ -135,13 +135,13 @@ function classifyLine(line) {
 
   // Shop name: short (3-14 chars), no price/skip/spec keywords, isolated
   if (t.length >= 3 && t.length <= 14 && !/[$￥¥]/.test(t) && !skipRe.test(t)
-      && !/^(?:颜色分类|数据线|型号|规格|版本|套餐)[：:]/.test(t)) {
+      && !/^(?:颜色分类|数据线|型号|规格|版本|套餐|商品规格|尺寸|容量|内存)[：:]/.test(t)) {
     return { type: 'shop', value: t };
   }
 
   // Product name: long line (>10 chars), not skip/price/spec
   if (t.length > 10 && !skipRe.test(t) && !/^[$￥¥]/.test(t)
-      && !/^(?:颜色分类|数据线|型号|规格|版本|套餐)[：:]/.test(t)) {
+      && !/^(?:颜色分类|数据线|型号|规格|版本|套餐|商品规格|尺寸|容量|内存)[：:]/.test(t)) {
     return { type: 'product', value: t };
   }
 
