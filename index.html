@@ -246,16 +246,15 @@ function extractLinksFromHTML(html) {
     }
   });
 
-  // Deduplicate: cart page has both image-link and text-link per item,
-  // both pointing to same product. Remove consecutive duplicates by item ID.
+  // Deduplicate consecutive identical URLs: cart page has both image-link
+  // and text-link per item pointing to the exact same URL. Keep if URL differs
+  // from previous (same id + different skuId = different spec, kept).
   var deduped = [];
-  var lastId = '';
+  var lastUrl = '';
   for (var i = 0; i < links.length; i++) {
-    var m = links[i].match(/[?&]id=(\d+)/);
-    var curId = m ? m[1] : links[i];
-    if (curId !== lastId) {
+    if (links[i] !== lastUrl) {
       deduped.push(links[i]);
-      lastId = curId;
+      lastUrl = links[i];
     }
   }
   return deduped;
