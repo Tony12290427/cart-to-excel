@@ -130,6 +130,33 @@ GitHub Pages 的地址永远带 GitHub 用户名（`<用户名>.github.io/<仓�
 - 部署后 `template.xlsx`、`README.md` 也会一并被公开访问，与现在 GitHub Pages 的情况相同。
 - 原来的 GitHub Pages 地址可以留着并行使用，两者不冲突。
 
+## 神经网络签名（离线生成，可选）
+
+除了页面上的字体生成，还可以用 Graves 手写 RNN（[sjvasquez/handwriting-synthesis](https://github.com/sjvasquez/handwriting-synthesis)）
+生成真正的神经网络手写签名：
+
+```bash
+python3 -m venv .venv-neural
+.venv-neural/bin/pip install tensorflow pillow
+.venv-neural/bin/python tools/neural_signature.py "Tony Chan" -o signature.png
+```
+
+再把 `signature.png` 用页面上的 **Upload image** 传进去即可。参数：`--bias`（0.5–1.5，越大越工整）、
+`--seed`（固定随机数，签名可复现）、`--width`（笔宽）、`--steps`（采样步数，默认每字符 40 步）。
+
+**实现说明**：模型是 2018 年的 TF1 计算图，但 `.meta` 文件里带着完整图定义，所以**不用装 TF1、
+也不用移植**，现代 TensorFlow（arm64 原生）直接恢复运行即可。权重首次运行时下载到 `tools/.model/`，
+**不进仓库**（已在 `.gitignore`）。
+
+两个限制：
+
+- **只能用非 priming 分支**。原图的风格 priming 走 `tf.cond`，在 TF2 下未被选中的分支会以
+  `TensorArray has size zero` 报错；而且仓库的 `styles/` 与它自己的 `demo.py` 已经不一致
+  （demo 读 `style-9-strokes.npy`，仓库里只有 `style-1.npy`／`style-2.npy`）。所以输出是"通用手写体"，
+  每次都不一样，多换几个 `--seed`／`--bias` 挑一个满意的。
+- ⚠️ **授权**：该仓库**没有 LICENSE 文件**，代码与 41.5 MB 权重默认保留所有权利。脚本刻意不把权重
+  放进仓库、仅供本地个人使用；若要公开分发权重或把模型嵌进网页，请先取得作者授权。
+
 ## 改模板
 
 `index.html` 把整个 `template.xlsx` 以 base64 硬编码在 `TEMPLATE_B64` 常量里，

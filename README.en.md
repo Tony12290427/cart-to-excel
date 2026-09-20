@@ -147,6 +147,41 @@ Notes:
   as they are on GitHub Pages today.
 - The existing GitHub Pages URL can stay live in parallel; the two do not conflict.
 
+## Neural signature (offline, optional)
+
+Besides the in-page font generator you can produce a genuine neural-network
+handwriting sample with the Graves handwriting RNN
+([sjvasquez/handwriting-synthesis](https://github.com/sjvasquez/handwriting-synthesis)):
+
+```bash
+python3 -m venv .venv-neural
+.venv-neural/bin/pip install tensorflow pillow
+.venv-neural/bin/python tools/neural_signature.py "Tony Chan" -o signature.png
+```
+
+Then drop `signature.png` into the page with **Upload image**. Options: `--bias`
+(0.5–1.5, higher is tidier), `--seed` (fix the RNG for a repeatable signature),
+`--width` (pen width), `--steps` (sampling steps, 40 per character by default).
+
+**How it works**: the model is a 2018 TF1 graph, but the `.meta` file carries the
+whole graph definition, so no TF1 install and no porting is required — modern
+TensorFlow restores and runs it natively on arm64. Weights are downloaded on
+first run into `tools/.model/` and are **not** committed (see `.gitignore`).
+
+Two limitations:
+
+- **Only the non-primed branch is usable.** Upstream's style priming goes through
+  `tf.cond`, and under TF2 the untaken branch dies with `TensorArray has size
+  zero`; upstream's `styles/` also no longer matches its own `demo.py` (the demo
+  reads `style-9-strokes.npy`, the repo ships `style-1.npy` / `style-2.npy`).
+  The result is therefore generic handwriting that differs on every run — try a
+  few `--seed` / `--bias` values and keep the one you like.
+- ⚠️ **Licensing**: that repository has **no LICENSE file**, so its code and the
+  41.5 MB checkpoint are all rights reserved by default. The script deliberately
+  keeps the weights out of this repository for local, personal use only. Get the
+  author's permission before redistributing the weights or embedding the model
+  in the web page.
+
 ## Changing the template
 
 `index.html` hard-codes the entire `template.xlsx` as base64 in the `TEMPLATE_B64` constant, so
