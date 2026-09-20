@@ -76,6 +76,33 @@
 - **离线使用**：把 `jszip.min.js` 下载到本地并改 `<script src>`。
   另外 `xlsx.full.min.js`（SheetJS）实际上没被任何代码调用，可以删掉，只留 JSZip。
 
+## 换地址：部署到 Vercel
+
+GitHub Pages 的地址永远带 GitHub 用户名（`<用户名>.github.io/<仓库名>/`），这个没法改；
+想换成中性地址就把仓库接到 Vercel，免费额度对这一个页面绰绰有余。
+
+1. 用 GitHub 账号登录 https://vercel.com/signup
+2. 打开 https://vercel.com/new ，授权 Vercel 读取 GitHub 仓库
+   （Install Vercel GitHub App，选这个仓库或全部仓库都行）
+3. 在 Import Git Repository 列表里选 `cart-to-excel` → **Import**
+4. Configure Project 照这样填：
+   - **Project Name**：`cart-to-excel`（决定地址 `cart-to-excel.vercel.app`，被占用就换一个）
+   - **Framework Preset**：`Other`
+   - **Root Directory**：`./`
+   - **Build Command / Output Directory**：**不要打开 Override**，留默认即可
+     —— 本项目是纯静态单文件（模板已 base64 内嵌在 `index.html` 里），没有构建步骤
+5. 点 **Deploy**，约半分钟出结果，地址形如 `https://cart-to-excel.vercel.app`
+6. 以后往 `master` push 会自动重新部署；要改地址在 Project Settings → Domains（绑自定义域名）
+   或 Settings → General（改 Project Name）
+
+注意事项：
+
+- `vercel.app` 在中国大陆可能访问慢或不通（Vercel 官方也建议用自定义域名改善大陆访问）；
+  香港／海外正常。队友主要在大陆的话，之后在 Vercel 里绑自己的域名更稳。
+- Vercel Hobby（免费）计划仅限**非商业**用途，社团内部工具符合。
+- 部署后 `template.xlsx`、`README.md` 也会一并被公开访问，与现在 GitHub Pages 的情况相同。
+- 原来的 GitHub Pages 地址可以留着并行使用，两者不冲突。
+
 ## 改模板
 
 `index.html` 把整个 `template.xlsx` 以 base64 硬编码在 `TEMPLATE_B64` 常量里，
