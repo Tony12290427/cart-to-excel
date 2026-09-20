@@ -1,5 +1,7 @@
 # Cart to Excel — HKUST Robotics Team Order Form Generator
 
+**中文** | [English](README.en.md)
+
 把淘宝/天猫购物车的内容一键转成订购表 Excel（基于 `template.xlsx`）。
 
 线上直接用：**https://tony12290427.github.io/cart-to-excel/**
