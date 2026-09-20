@@ -3,9 +3,9 @@
 
 This drives the checkpoint from sjvasquez/handwriting-synthesis (a 2018 TF1
 model) through modern TensorFlow: the .meta file carries the full graph, so no
-TF1 install and no porting is needed. The model weights are downloaded on first
-run into ``tools/.model/`` and are deliberately NOT stored in this repository —
-see the licensing note in README.md before redistributing them.
+TF1 install and no porting is needed. The checkpoint ships in ``tools/model/``;
+if those files are missing the script re-downloads them from upstream. Note that
+upstream has no LICENSE file — see the licensing note in README.md.
 
     python3 -m venv .venv-neural
     .venv-neural/bin/pip install tensorflow pillow
@@ -19,7 +19,7 @@ import sys
 import urllib.request
 
 BASE = 'https://raw.githubusercontent.com/sjvasquez/handwriting-synthesis/master'
-MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.model')
+MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'model')
 ASSETS = {
     'model-17900.meta': BASE + '/checkpoints/model-17900.meta',
     'model-17900.index': BASE + '/checkpoints/model-17900.index',
@@ -47,7 +47,7 @@ def ensure_assets():
     for name, url in ASSETS.items():
         path = os.path.join(MODEL_DIR, name)
         if os.path.exists(path) and os.path.getsize(path) > 0:
-            continue
+            continue          # the checkpoint is committed; this is a fallback
         sys.stderr.write('downloading %s ...\n' % name)
         urllib.request.urlretrieve(url, path)
 

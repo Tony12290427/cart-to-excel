@@ -165,8 +165,10 @@ Then drop `signature.png` into the page with **Upload image**. Options: `--bias`
 
 **How it works**: the model is a 2018 TF1 graph, but the `.meta` file carries the
 whole graph definition, so no TF1 install and no porting is required — modern
-TensorFlow restores and runs it natively on arm64. Weights are downloaded on
-first run into `tools/.model/` and are **not** committed (see `.gitignore`).
+TensorFlow restores and runs it natively on arm64. The checkpoint ships with the
+repository in `tools/model/` (41.5 MB total: `.meta` 1.6 MB, `.index` 1 KB,
+`.data-00000-of-00001` 41.6 MB); if those files are missing the script downloads
+them from upstream again.
 
 Two limitations:
 
@@ -176,11 +178,12 @@ Two limitations:
   reads `style-9-strokes.npy`, the repo ships `style-1.npy` / `style-2.npy`).
   The result is therefore generic handwriting that differs on every run — try a
   few `--seed` / `--bias` values and keep the one you like.
-- ⚠️ **Licensing**: that repository has **no LICENSE file**, so its code and the
-  41.5 MB checkpoint are all rights reserved by default. The script deliberately
-  keeps the weights out of this repository for local, personal use only. Get the
-  author's permission before redistributing the weights or embedding the model
-  in the web page.
+- ⚠️ **Licensing**: upstream has **no LICENSE file**, so its code and the 41.5 MB
+  checkpoint are all rights reserved by default. This repository commits that
+  checkpoint (`tools/model/`) at the maintainer's request, which is an
+  unauthorised redistribution — if the author objects, removing it means deleting
+  the files **and rewriting git history**. Get the author's permission before
+  going further, e.g. embedding the model in the published web page.
 
 ## Changing the template
 

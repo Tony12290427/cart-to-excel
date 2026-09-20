@@ -1,7 +1,6 @@
-# Neural signature tool (tools/neural_signature.py)
-# The Graves RNN checkpoint is downloaded on first run and is deliberately not
-# stored in this repository — see the licensing note in README.md.
-tools/.model/
+# Neural signature tool (tools/neural_signature.py).
+# The Graves RNN checkpoint lives in tools/model/ and IS committed (41.5 MB).
+# Note: upstream ships no LICENSE file — see the licensing note in README.md.
 .venv-neural/
 
 .DS_Store
