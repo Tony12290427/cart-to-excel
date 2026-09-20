@@ -9,17 +9,18 @@
 ## 怎么用
 
 1. 打开页面（上面的网址，或本地双击 `index.html`）。
-   ⚠️ 需要联网：页面从 CDN 加载 JSZip。
-2. 填 **Competition Name**（写进表格 B3）和 **Student Name**（写进 H66）。可以留空。
-3. 到淘宝购物车页面全选复制：`Ctrl+A` → `Ctrl+C`（Mac 用 `Cmd`）。
-4. 回到本页面，**先用鼠标点一下虚线框里的输入框**，再按键盘 `Ctrl+V`。
+   ⚠️ 需要联网：页面从 CDN 加载 JSZip；生成签名还需要 Google Fonts（加载不出会有提示，见下）。
+2. 填 **Competition Name**（写进表格 **C3**）和 **Student Name**（写进 **H66**）。可以留空。
+3. （可选）做签名：**输入名字点 Generate**，或点 **Upload image** 传自己的签名图，见下。
+4. 到淘宝购物车页面全选复制：`Ctrl+A` → `Ctrl+C`（Mac 用 `Cmd`）。
+5. 回到本页面，**先用鼠标点一下虚线框里的输入框**，再按键盘 `Ctrl+V`。
    必须用键盘粘贴：代码监听 paste 事件，会同时读取纯文本和 HTML 两份数据，
    右键菜单粘贴可能丢掉 HTML，商品链接和数量就没了。
-5. 出现 `Found N items | Total ¥…` 后点 **Review & Edit**。
+6. 出现 `Found N items | Total ¥…` 后点 **Review & Edit**。
    如果后面跟着 `| QTY from clipboard HTML`，说明数量是从 HTML 里救回来的（见下）。
-6. 核对／修改：商品名、QTY、单价、Type 分类、Link；最右 `×` 删行。
+7. 核对／修改：商品名、QTY、单价、Type 分类、Link；最右 `×` 删行。
    单价没解析出来的格子会标黄，需要手填。
-7. 点 **Export Excel** → 下载 `OrderForm_YYYYMMDD.xlsx`。
+8. 点 **Export Excel** → 下载 `OrderForm_YYYYMMDD.xlsx`。
 
 ## 关于数量（重要）
 
@@ -36,6 +37,28 @@
 
 如果结果栏既没有 `QTY from clipboard HTML`、表格里又全是 1，说明两条路都没拿到，
 用备忘录绕一下即可。
+
+## 签名（可选）
+
+两种做法，都在页面顶部的 Signature 一栏：
+
+1. **输入名字生成**：填名字 → 选风格 → 点 **Generate**。
+   - `Everyday pen`（默认）：Dancing Script，像用马克笔签名
+   - `Flowing script`：Great Vibes，更花体的正式签名
+   - 字体会从 Google Fonts 加载；加载不出来时页面会给出提示并回退到系统手写体
+     （macOS 自带 SignPainter / Snell Roundhand 等，效果也不错）
+2. **上传真实签名**：点 **Upload image** 选一张照片或扫描件，
+   页面会自动把白底变透明、裁掉空白边，再嵌进表格。
+
+生成的签名会作为图片写进 `Sign of student` 那一栏（H70 起），导出时嵌入 xlsx，
+不需要手动插入。
+
+> 为什么用字体而不是 AI 手写模型：调研过 Graves LSTM 类的手写合成
+> （[sjvasquez/handwriting-synthesis](https://github.com/sjvasquez/handwriting-synthesis)、
+> [tmarkovski/longhand](https://github.com/tmarkovski/longhand) 这类在浏览器里跑的神经笔迹引擎），
+> 效果确实更"手写"，但**这两个仓库都没有 LICENSE 文件**（默认保留所有权利），
+> 而且要把几 MB 的模型权重和推理运行时塞进这个静态页面，首次加载会明显变慢。
+> 现在的字体方案用的是 SIL OFL 授权的开源字体，零依赖、离线可用，签名的观感已经够用。
 
 ## 解析规则速查（改代码前先看这里）
 
@@ -64,7 +87,9 @@
 ## 输出的 Excel
 
 - 用 `template.xlsx` 做底，30 个商品行（第 11–40 行），一个商品一行。
-- `B3` = Competition Name，`H66` = Name of student。
+- `C3` = Competition Name（A3 是 `Competition:` 标签，这套表的值都填在 C 列，如 C4 = Intelligent Racing），
+  `H66` = Name of student（G66 是标签）。
+- 签名图片贴在 **H70 附近**（`Sign of student` 标签右侧，占 H70:J72 区域）。
 - 第 42–60 行的 SUMIF 分类小计、第 61 行 Grand Total 是模板自带公式，打开 Excel 会自动重算；
   网页预览或没重算时可能显示 0。
 - 每行默认 Status = `Pending Approval`，HKD / USD 列写 0。

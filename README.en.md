@@ -9,18 +9,23 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
 ## How to use
 
 1. Open the page (the URL above, or double-click `index.html` locally).
-   ⚠️ An internet connection is required: the page loads JSZip from a CDN.
-2. Fill in **Competition Name** (goes to cell B3) and **Student Name** (goes to H66). Both are optional.
-3. On the Taobao cart page, select all and copy: `Ctrl+A` → `Ctrl+C` (`Cmd` on Mac).
-4. Back on this page, **click into the input box inside the dashed area first**, then press `Ctrl+V`.
+   ⚠️ An internet connection is required: the page loads JSZip from a CDN, and the
+   generated signature additionally loads its handwriting font from Google Fonts
+   (if that fails the page says so and falls back to a system handwriting face).
+2. Fill in **Competition Name** (goes to cell **C3**) and **Student Name** (goes to **H66**).
+   Both are optional.
+3. (Optional) Add a signature: type a name and press **Generate**, or press **Upload image**
+   to use a picture of your real signature — see the next section.
+4. On the Taobao cart page, select all and copy: `Ctrl+A` → `Ctrl+C` (`Cmd` on Mac).
+5. Back on this page, **click into the input box inside the dashed area first**, then press `Ctrl+V`.
    Use the keyboard shortcut: the page listens for the paste event, which carries both the plain-text
    and the HTML flavor. Pasting from the right-click menu can drop the HTML, losing the item links
    and quantities.
-5. Once `Found N items | Total ¥…` appears, click **Review & Edit**.
+6. Once `Found N items | Total ¥…` appears, click **Review & Edit**.
    If it is followed by `| QTY from clipboard HTML`, the quantities were recovered from the HTML (see below).
-6. Check and fix: item name, QTY, unit price, Type category, Link. `×` on the right deletes a row.
+7. Check and fix: item name, QTY, unit price, Type category, Link. `×` on the right deletes a row.
    Cells whose price could not be parsed are highlighted yellow and need to be filled in by hand.
-7. Click **Export Excel** → downloads `OrderForm_YYYYMMDD.xlsx`.
+8. Click **Export Excel** → downloads `OrderForm_YYYYMMDD.xlsx`.
 
 ## About quantities (important)
 
@@ -40,6 +45,29 @@ There are two ways to get the quantities:
 
 If the result bar shows no `QTY from clipboard HTML` and every row is 1, neither path worked —
 go through Notes once.
+
+## Signature (optional)
+
+Two ways to provide one, both in the Signature row at the top of the page:
+
+1. **Generate from a typed name**: enter the name, pick a style, press **Generate**.
+   - `Everyday pen` (default) — Dancing Script, looks like signing with a marker
+   - `Flowing script` — Great Vibes, a more formal calligraphic signature
+   - The faces load from Google Fonts; when that is unreachable the page warns you and
+     falls back to a system handwriting face (macOS ships SignPainter, Snell Roundhand, …)
+2. **Upload a real signature**: press **Upload image** and pick a photo or scan. The page
+   makes the white background transparent, crops to the ink, and embeds the result.
+
+Either way the signature is written into the `Sign of student` area (from H70) as an image
+when you export — there is nothing to paste into Excel by hand.
+
+> Why fonts instead of an AI handwriting model: the neural options that run client-side
+> ([sjvasquez/handwriting-synthesis](https://github.com/sjvasquez/handwriting-synthesis),
+> [tmarkovski/longhand](https://github.com/tmarkovski/longhand) and similar) do look more
+> hand-written, but **neither repository ships a LICENSE file** (so all rights are reserved
+> by default), and shipping multi-megabyte weights plus an inference runtime inside this
+> static page would make the first load noticeably slow. The font approach uses SIL OFL
+> licensed faces, needs no build step, works offline, and reads convincingly as a signature.
 
 ## Parser rules (read this before changing the code)
 
@@ -71,7 +99,9 @@ Other conventions:
 ## The exported Excel
 
 - Built on `template.xlsx`, 30 item rows (rows 11–40), one item per row.
-- `B3` = Competition Name, `H66` = Name of student.
+- `C3` = Competition Name (A3 holds the `Competition:` label; this form puts every value
+  in column C, e.g. C4 = Intelligent Racing), `H66` = Name of student (labelled in G66).
+- The signature image is placed next to the `Sign of student` label, covering H70:J72.
 - The SUMIF category subtotals in rows 42–60 and the Grand Total in row 61 are template formulas and
   recalculate when opened in Excel; a web preview may still show 0.
 - Every row defaults to Status = `Pending Approval`, with HKD / USD columns set to 0.
