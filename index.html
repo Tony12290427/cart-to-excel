@@ -6,6 +6,12 @@
 <title>Cart to Order Form</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- Handwriting faces for the generated signature (both SIL Open Font License).
+     Purely an enhancement: if the CDN is unreachable, the canvas falls back to
+     the handwriting faces already installed on the system. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -73,6 +79,19 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
       <label style="font-size: 13px; color: #666;">Student Name</label>
       <input id="input-student" type="text" placeholder="e.g. Chan Tai Man" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
     </div>
+  </div>
+  <div id="signature-box" style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:16px 20px; margin-bottom:20px;">
+    <label style="font-size:13px; color:#666;">Signature <span style="color:#aaa;">(optional — written into the "Sign of student" cell of the form)</span></label>
+    <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">
+      <input id="input-signature-text" type="text" placeholder="Type your name, then Generate" style="flex:1; min-width:180px; padding:8px 12px; border:1px solid #ddd; border-radius:4px; font-size:14px;">
+      <select id="select-signature-style" title="Signature style" style="padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; background:#fff;"></select>
+      <button id="btn-sign-generate" style="padding:8px 16px; background:#4a90d9; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:14px;">Generate</button>
+      <button id="btn-sign-upload" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Upload image</button>
+      <button id="btn-sign-clear" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Clear</button>
+      <input id="input-signature-file" type="file" accept="image/*" style="display:none;">
+    </div>
+    <div id="signature-preview" style="margin-top:12px; min-height:56px; border:1px dashed #ddd; border-radius:6px; padding:8px; display:flex; align-items:center; justify-content:center; color:#bbb; font-size:13px;">No signature yet — generate one or upload an image</div>
+    <div id="signature-font-note" style="margin-top:6px; font-size:12px; color:#b26a00;"></div>
   </div>
   <div id="paste-area">
     <div class="paste-zone" id="paste-zone">
@@ -514,6 +533,236 @@ function cellXML(col, row, value, isNumber) {
   }
 }
 
+// A1 → 1, B1 → 2, ... AA1 → 27
+function colToNum(col) {
+  var n = 0;
+  for (var i = 0; i < col.length; i++) n = n * 26 + (col.charCodeAt(i) - 64);
+  return n;
+}
+
+// Write one cell into a sheet XML string. Replaces the cell if that ref already
+// exists, otherwise inserts it **in column order** inside its row — OOXML wants
+// cells sorted by column, and inserting at the start of a row (as this used to)
+// puts them out of order.
+function setCellXML(sheetXML, ref, cellXml) {
+  var rowNum = ref.replace(/^[A-Z]+/, '');
+  var col = ref.replace(/\d+$/, '');
+
+  var existing = new RegExp('<c r="' + ref + '"[^>]*/>|<c r="' + ref + '"[^>]*>[\\s\\S]*?</c>');
+  if (existing.test(sheetXML)) return sheetXML.replace(existing, cellXml);
+
+  var rowRe = new RegExp('(<row r="' + rowNum + '"[^>]*>)([\\s\\S]*?)(</row>)');
+  var m = sheetXML.match(rowRe);
+  if (!m) return sheetXML;
+
+  var body = m[2];
+  var cells = body.match(/<c r="[A-Z]+\d+"[^>]*\/>|<c r="[A-Z]+\d+"[^>]*>[\s\S]*?<\/c>/g) || [];
+  var colNum = colToNum(col);
+  var insertAt = body.length;
+  for (var i = 0; i < cells.length; i++) {
+    var refMatch = cells[i].match(/<c r="([A-Z]+)\d+"/);
+    if (refMatch && colToNum(refMatch[1]) > colNum) {
+      insertAt = body.indexOf(cells[i]);
+      break;
+    }
+  }
+  var newBody = body.slice(0, insertAt) + cellXml + body.slice(insertAt);
+  return sheetXML.replace(rowRe, function() { return m[1] + newBody + m[3]; });
+}
+
+// === SIGNATURE ===
+
+// Both faces are SIL Open Font License, so using and embedding them is fine.
+// A stack starts with its webfont and falls back to handwriting faces already
+// installed on macOS, then to generic cursive.
+var SIGNATURE_STYLES = [
+  { label: 'Everyday pen',   font: '"Dancing Script", "SignPainter", "Bradley Hand", "Brush Script MT", cursive', slant: -0.035 },
+  { label: 'Flowing script', font: '"Great Vibes", "Snell Roundhand", "Apple Chancery", cursive', slant: -0.05 },
+];
+
+var signatureDataUrl = null;
+
+// Draw the whole string in one fillText: script faces rely on ligatures and
+// connecting strokes, which per-character rendering would break apart.
+function renderSignature(text, styleIndex) {
+  var style = SIGNATURE_STYLES[styleIndex] || SIGNATURE_STYLES[0];
+  var fontSize = 110;
+  var pad = 24;
+
+  var probe = document.createElement('canvas').getContext('2d');
+  probe.font = '400 ' + fontSize + 'px ' + style.font;
+  var textWidth = Math.max(probe.measureText(text).width, fontSize);
+
+  var canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(textWidth + pad * 2);
+  canvas.height = Math.ceil(fontSize * 1.7);
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '400 ' + fontSize + 'px ' + style.font;
+  ctx.fillStyle = '#111';
+  ctx.textBaseline = 'alphabetic';
+  ctx.translate(pad, canvas.height * 0.7);
+  ctx.rotate(style.slant);
+  ctx.fillText(text, 0, 0);
+  return canvas;
+}
+
+// Turn a photo/scan of a signature into a transparent PNG: near-white becomes
+// fully transparent, darker pixels become ink, then crop to the ink bounds.
+function traceSignatureImage(img) {
+  var canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  var frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  var d = frame.data;
+  var minX = canvas.width, minY = canvas.height, maxX = -1, maxY = -1;
+  for (var y = 0; y < canvas.height; y++) {
+    for (var x = 0; x < canvas.width; x++) {
+      var i = (y * canvas.width + x) * 4;
+      var lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      var alpha = Math.round((235 - lum) * 255 / 175);   // >=235 → 0, <=60 → 255
+      if (alpha <= 0) { d[i + 3] = 0; continue; }
+      d[i + 3] = alpha > 255 ? 255 : alpha;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  ctx.putImageData(frame, 0, 0);
+  if (maxX < 0) return canvas;   // blank upload, keep as-is
+
+  var pad = Math.round(Math.max(canvas.width, canvas.height) * 0.02);
+  var crop = document.createElement('canvas');
+  crop.width = maxX - minX + 1 + pad * 2;
+  crop.height = maxY - minY + 1 + pad * 2;
+  crop.getContext('2d').drawImage(canvas, -minX + pad, -minY + pad);
+  return crop;
+}
+
+function setSignature(dataUrl) {
+  signatureDataUrl = dataUrl;
+  var preview = document.getElementById('signature-preview');
+  preview.innerHTML = '';
+  preview.style.border = '1px dashed #ddd';
+  var img = document.createElement('img');
+  img.src = dataUrl;
+  img.style.maxWidth = '100%';
+  img.style.maxHeight = '90px';
+  preview.appendChild(img);
+}
+
+// Warn when the handwriting webfont behind a style is unavailable, because the
+// canvas then silently falls back to a plain system font that looks nothing
+// like a signature (most likely on networks where Google Fonts is blocked).
+function signatureFontNote(style) {
+  var primary = style.font.match(/"([^"]+)"/);
+  if (!primary || !document.fonts || !document.fonts.check) return '';
+  var name = primary[1];
+  var loaded = false;
+  try { loaded = document.fonts.check('110px "' + name + '"'); } catch (e) { loaded = true; }
+  if (loaded) return '';
+  return '⚠️ 手写体 "' + name + '" 没能加载（多半是网络问题），当前用的是系统回退字体。'
+    + '可以改用 "Upload image" 上传真实签名，或换个风格试试。';
+}
+
+function clearSignature() {
+  signatureDataUrl = null;
+  document.getElementById('input-signature-file').value = '';
+  document.getElementById('signature-font-note').textContent = '';
+  var preview = document.getElementById('signature-preview');
+  preview.innerHTML = 'No signature yet — generate one or upload an image';
+}
+
+// Stamp the signature into the workbook. The template already ships a drawing
+// for sheet1 (oneCellAnchor placeholders over 1x1 transparent PNGs), so the
+// signature just becomes image3.png plus one extra relationship and anchor.
+function embedSignature(zip) {
+  if (!signatureDataUrl) return Promise.resolve();
+
+  var binary = atob(signatureDataUrl.split(',')[1]);
+  var png = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) png[i] = binary.charCodeAt(i);
+  zip.file('xl/media/image3.png', png);
+
+  var relsPath = 'xl/drawings/_rels/drawing1.xml.rels';
+  var drawPath = 'xl/drawings/drawing1.xml';
+
+  return zip.file(relsPath).async('string').then(function(rels) {
+    if (rels.indexOf('image3.png') < 0) {
+      zip.file(relsPath, rels.replace('</Relationships>',
+        '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
+        + ' Target="../media/image3.png"/></Relationships>'));
+    }
+    return zip.file(drawPath).async('string');
+  }).then(function(drawing) {
+    if (drawing.indexOf('name="signature.png"') >= 0) return;
+    // Anchored from H70 to K73 (0-based col 7→10, row 69→72): the three rows
+    // below the "Sign of student" label are only 15.75pt tall each, so the
+    // image needs the extra room to look like a signature.
+    var anchor = '<xdr:twoCellAnchor editAs="oneCell">'
+      + '<xdr:from><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>69</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+      + '<xdr:to><xdr:col>10</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>72</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'
+      + '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="101" name="signature.png"/><xdr:cNvPicPr preferRelativeResize="0"/></xdr:nvPicPr>'
+      + '<xdr:blipFill><a:blip cstate="print" r:embed="rId3"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
+      + '<xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></xdr:spPr></xdr:pic>'
+      + '<xdr:clientData fLocksWithSheet="0"/></xdr:twoCellAnchor>';
+    zip.file(drawPath, drawing.replace('</xdr:wsDr>', anchor + '</xdr:wsDr>'));
+  });
+}
+
+// Style dropdown + buttons
+(function initSignatureUI() {
+  var styleSelect = document.getElementById('select-signature-style');
+  SIGNATURE_STYLES.forEach(function(style, idx) {
+    var option = document.createElement('option');
+    option.value = String(idx);
+    option.textContent = style.label;
+    styleSelect.appendChild(option);
+  });
+  document.getElementById('btn-sign-generate').addEventListener('click', function() {
+    var text = document.getElementById('input-signature-text').value.trim()
+      || document.getElementById('input-student').value.trim();
+    if (!text) {
+      alert('Type a name to generate a signature (or fill in Student Name first).');
+      return;
+    }
+    document.getElementById('input-signature-text').value = text;
+    var style = SIGNATURE_STYLES[parseInt(styleSelect.value, 10)] || SIGNATURE_STYLES[0];
+    var draw = function() {
+      setSignature(renderSignature(text, parseInt(styleSelect.value, 10)).toDataURL('image/png'));
+      document.getElementById('signature-font-note').textContent = signatureFontNote(style);
+    };
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(draw);
+    } else {
+      draw();
+    }
+  });
+
+  document.getElementById('btn-sign-upload').addEventListener('click', function() {
+    document.getElementById('input-signature-file').click();
+  });
+
+  document.getElementById('input-signature-file').addEventListener('change', function(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      var img = new Image();
+      img.onload = function() { setSignature(traceSignatureImage(img).toDataURL('image/png')); };
+      img.onerror = function() { alert('Could not read that image file.'); };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('btn-sign-clear').addEventListener('click', clearSignature);
+})();
+
 function exportExcel() {
   if (items.length === 0) {
     alert('No items to export');
@@ -587,27 +836,26 @@ function exportExcel() {
         var competitionName = document.getElementById('input-competition').value.trim();
         var studentName = document.getElementById('input-student').value.trim();
 
-        // Inject Competition name into cell B3
+        // C3 is the value cell under the "Competition:" label in A3
+        // (the template's label/value pattern is A-column label → C-column value,
+        //  e.g. A4 "Sub-team:" → C4 "Intelligent Racing").
         if (competitionName) {
-          var cellB3 = cellXML('B', 3, competitionName, false);
-          sheetXML = sheetXML.replace(/<c r="B3"[^/]*\/>/, '');
-          sheetXML = sheetXML.replace(/<c r="B3"[^>]*>.*?<\/c>/, '');
-          sheetXML = sheetXML.replace(/(<row r="3"[^>]*>)/, '$1' + cellB3);
+          sheetXML = setCellXML(sheetXML, 'C3', cellXML('C', 3, competitionName, false));
         }
 
-        // Inject Student Name into cell H66
+        // H66 sits next to the "Name of student" label in G66
         if (studentName) {
-          var cellH66 = cellXML('H', 66, studentName, false);
-          sheetXML = sheetXML.replace(/<c r="H66"[^/]*\/>/, '');
-          sheetXML = sheetXML.replace(/<c r="H66"[^>]*>.*?<\/c>/, '');
-          sheetXML = sheetXML.replace(/(<row r="66"[^>]*>)/, '$1' + cellH66);
+          sheetXML = setCellXML(sheetXML, 'H66', cellXML('H', 66, studentName, false));
         }
 
         // Update the zip
         zip.file('xl/worksheets/sheet1.xml', sheetXML);
 
-        // Generate new xlsx
-        return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        // Stamp the signature image, if one was drawn or uploaded
+        return embedSignature(zip).then(function() {
+          // Generate new xlsx
+          return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        });
       });
     }).then(function(blob) {
       var filename = 'OrderForm_' + today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.xlsx';
