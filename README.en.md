@@ -100,8 +100,11 @@ Other conventions:
 
 - Built on `template.xlsx`, 30 item rows (rows 11–40), one item per row.
 - `C3` = Competition Name (A3 holds the `Competition:` label; this form puts every value
-  in column C, e.g. C4 = Intelligent Racing), `H66` = Name of student (labelled in G66).
-- The signature image is placed next to the `Sign of student` label, covering H70:J72.
+  in column C, e.g. C4 = Intelligent Racing), `H66` = Name of student (labelled in G66),
+  `H74` = Date (labelled in G74, filled with the export date).
+- The signature image is anchored at **H70** and sized from its **own aspect ratio**
+  (0.55 in tall by default, at most 3.4 in wide), so it is never stretched; a longer
+  name simply makes it wider.
 - The SUMIF category subtotals in rows 42–60 and the Grand Total in row 61 are template formulas and
   recalculate when opened in Excel; a web preview may still show 0.
 - Every row defaults to Status = `Pending Approval`, with HKD / USD columns set to 0.

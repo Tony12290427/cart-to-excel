@@ -88,8 +88,9 @@
 
 - 用 `template.xlsx` 做底，30 个商品行（第 11–40 行），一个商品一行。
 - `C3` = Competition Name（A3 是 `Competition:` 标签，这套表的值都填在 C 列，如 C4 = Intelligent Racing），
-  `H66` = Name of student（G66 是标签）。
-- 签名图片贴在 **H70 附近**（`Sign of student` 标签右侧，占 H70:J72 区域）。
+  `H66` = Name of student（G66 是标签），`H74` = Date（G74 是标签，填导出当天日期）。
+- 签名图片以 **H70** 为左上角、按**图片自身长宽比**定尺寸（默认高 0.55 英寸，最长 3.4 英寸），
+  所以不会被拉扁；名字越长签名越宽。
 - 第 42–60 行的 SUMIF 分类小计、第 61 行 Grand Total 是模板自带公式，打开 Excel 会自动重算；
   网页预览或没重算时可能显示 0。
 - 每行默认 Status = `Pending Approval`，HKD / USD 列写 0。
