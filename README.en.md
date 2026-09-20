@@ -25,7 +25,9 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
    If it is followed by `| QTY from clipboard HTML`, the quantities were recovered from the HTML (see below).
 7. Check and fix: item name, QTY, unit price, Type category, Link. `×` on the right deletes a row.
    Cells whose price could not be parsed are highlighted yellow and need to be filled in by hand.
-8. Click **Export Excel** → downloads `OrderForm_YYYYMMDD.xlsx`.
+8. Click **Export Excel** → downloads `YYYYMMDD <Competition Name> order form.xlsx`
+   (e.g. `20260628 Go-Kart Extra order form.xlsx`; with Competition blank it is
+   `20260628 order form.xlsx`).
 
 ## About quantities (important)
 

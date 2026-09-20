@@ -878,7 +878,19 @@ function exportExcel() {
         });
       });
     }).then(function(blob) {
-      var filename = 'OrderForm_' + today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '.xlsx';
+      // "<YYYYMMDD> <Competition Name> order form.xlsx" — e.g.
+      // "20260628 Go-Kart Extra order form.xlsx". Strip characters that are not
+      // legal in a filename, and skip the name entirely when it is left blank.
+      var stamp = today.getFullYear()
+        + String(today.getMonth() + 1).padStart(2, '0')
+        + String(today.getDate()).padStart(2, '0');
+      var competitionForName = document.getElementById('input-competition').value
+        .trim()
+        .replace(/[\\/:*?"<>|]/g, '')
+        .replace(/\s+/g, ' ');
+      var filename = stamp
+        + (competitionForName ? ' ' + competitionForName : '')
+        + ' order form.xlsx';
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;

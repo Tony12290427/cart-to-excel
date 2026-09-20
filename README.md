@@ -20,7 +20,8 @@
    如果后面跟着 `| QTY from clipboard HTML`，说明数量是从 HTML 里救回来的（见下）。
 7. 核对／修改：商品名、QTY、单价、Type 分类、Link；最右 `×` 删行。
    单价没解析出来的格子会标黄，需要手填。
-8. 点 **Export Excel** → 下载 `OrderForm_YYYYMMDD.xlsx`。
+8. 点 **Export Excel** → 下载 `YYYYMMDD <Competition Name> order form.xlsx`
+   （例如 `20260628 Go-Kart Extra order form.xlsx`；Competition 留空时是 `20260628 order form.xlsx`）。
 
 ## 关于数量（重要）
 
