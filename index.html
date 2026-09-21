@@ -116,6 +116,11 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   </div>
   <div id="editor-area" style="display:none;">
     <div id="table-container"></div>
+    <div id="paste-more" style="background:#fff; border:2px dashed #ccc; border-radius:8px; padding:14px 18px; margin-bottom:16px;">
+      <div style="font-size:13px; color:#666; margin-bottom:6px;">📋 Paste more items here — they are added to the end of the list</div>
+      <textarea id="paste-input-more" placeholder="Click here, then Ctrl+V" style="width:100%; min-height:72px; border:1px solid #eee; border-radius:4px; padding:10px; font-size:13px; resize:vertical;"></textarea>
+      <div id="paste-more-status" style="font-size:12px; color:#2e7d32; margin-top:6px; min-height:16px;"></div>
+    </div>
     <div id="summary-bar" class="summary-bar"></div>
   </div>
   <div id="output-area" style="display:none; margin-top: 15px; text-align: right;">
@@ -304,7 +309,7 @@ function parseClipboardText(plainText) {
         confidence: item.price !== null && item.name.length > 5,
       });
 
-      if (items.length >= 30) break;
+      if (items.length >= MAX_ITEMS) break;
     }
   }
 
@@ -442,7 +447,10 @@ const resultBar = document.getElementById('result-bar');
 document.getElementById('btn-restart').addEventListener('click', clearAll);
 
 // === PASTE HANDLER ===
-pasteInput.addEventListener('paste', function(e) {
+
+// One code path for both boxes: the first paste replaces the list, pasting into
+// the box under the table appends to the end of it.
+function handleCartPaste(e, append) {
   e.preventDefault();
   const plainText = e.clipboardData.getData('text/plain');
   const html = e.clipboardData.getData('text/html');
@@ -453,27 +461,35 @@ pasteInput.addEventListener('paste', function(e) {
   }
 
   qtySource = '';
-  items = parseClipboardText(plainText);
+  let parsed = parseClipboardText(plainText);
 
-  if (items.length === 0) {
+  if (parsed.length === 0) {
     showError('No products found. Check you copied from the cart page.');
     return;
   }
 
   if (html) {
-    const links = extractLinksFromHTML(html);
-    items = assignLinks(items, links);
+    parsed = assignLinks(parsed, extractLinksFromHTML(html));
 
     // Direct cart copy: the plain text carries no quantity lines at all, so
     // take the numbers from the HTML flavor instead.
     if (qtyTokensInText === 0) {
       const quantities = extractQuantitiesFromHTML(html);
       let recovered = 0;
-      for (let i = 0; i < Math.min(items.length, quantities.length); i++) {
-        if (quantities[i] !== null) { items[i].quantity = quantities[i]; recovered++; }
+      for (let i = 0; i < Math.min(parsed.length, quantities.length); i++) {
+        if (quantities[i] !== null) { parsed[i].quantity = quantities[i]; recovered++; }
       }
       if (recovered > 0) qtySource = 'clipboard HTML';
     }
+  }
+
+  const appendTo = append && items.length > 0;
+  if (appendTo) {
+    const base = items.length;
+    parsed.forEach((item, i) => { item.id = base + i + 1; });
+    items = items.concat(parsed);
+  } else {
+    items = parsed;
   }
 
   const totalPrice = items.reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 1), 0);
@@ -486,10 +502,22 @@ pasteInput.addEventListener('paste', function(e) {
   resultBar.style.display = 'flex';
   resultBar.style.background = '#e8f5e9';
   pasteZone.style.display = 'none';
-  pasteInput.value = '';
+  if (!appendTo) pasteInput.value = '';
+  e.target.value = '';
 
   renderEditor();
-});
+
+  if (appendTo) {
+    const status = document.getElementById('paste-more-status');
+    status.textContent = '✅ Added ' + parsed.length + ' item(s) — ' + items.length + ' in the list'
+      + (items.length > MAX_ITEMS ? ' · only the first ' + MAX_ITEMS + ' fit the form' : '');
+    const firstNew = document.querySelector('.edit-table tbody tr[data-idx="' + (items.length - parsed.length) + '"]');
+    if (firstNew && firstNew.scrollIntoView) firstNew.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+pasteInput.addEventListener('paste', function(e) { handleCartPaste(e, false); });
+document.getElementById('paste-input-more').addEventListener('paste', function(e) { handleCartPaste(e, true); });
 
 function showError(msg) {
   resultBar.innerHTML = `<span style="color:#c62828;">⚠ ${msg}</span>`;
@@ -529,6 +557,9 @@ const CATEGORIES = [
 
 // Style IDs extracted from template Row 11
 var COL_STYLES = { A:30, B:31, C:32, D:31, E:33, F:34, G:30, H:35, I:36, J:37, K:38 };
+
+// The form has exactly 30 item rows (11-40), so anything beyond is not exported.
+var MAX_ITEMS = 30;
 
 function cellXML(col, row, value, isNumber) {
   var ref = col + row;
@@ -1002,8 +1033,9 @@ function renderEditor() {
       return '<option value="' + c + '"' + (c === item.category ? ' selected' : '') + '>' + c + '</option>';
     }).join('');
 
-    html += '<tr data-idx="' + idx + '">';
-    html += '<td class="col-num">' + (idx + 1) + '</td>';
+    var beyond = idx >= MAX_ITEMS;
+    html += '<tr data-idx="' + idx + '"' + (beyond ? ' style="opacity:.55;" title="Past row 40 of the form — not exported"' : '') + '>';
+    html += '<td class="col-num">' + (idx + 1) + (beyond ? ' ⚠' : '') + '</td>';
     html += '<td><input type="text" value="' + escAttr(displayName) + '" class="col-name-input" data-field="displayName"></td>';
     html += '<td class="col-qty"><input type="number" value="' + item.quantity + '" min="1" data-field="quantity"></td>';
     html += '<td class="col-price"><input type="text" value="' + (item.price !== null ? item.price : '') + '" class="' + priceClass + '" data-field="price"></td>';
@@ -1016,15 +1048,21 @@ function renderEditor() {
   html += '</tbody></table>';
   document.getElementById('table-container').innerHTML = html;
 
+  // Bind 'input' as well as 'change': the number spinners and typing both have
+  // to move the running total immediately, not only after a row is deleted.
   document.querySelectorAll('.edit-table [data-field]').forEach(function(el) {
-    el.addEventListener('change', function() {
-      var row = this.closest('tr');
+    function applyField() {
+      var row = el.closest('tr');
       var idx = parseInt(row.dataset.idx);
-      var field = this.dataset.field;
-      var value = this.value;
+      var field = el.dataset.field;
+      var value = el.value;
 
-      if (field === 'quantity') { value = parseInt(value) || 1; }
-      if (field === 'price') { value = parseFloat(value) || null; }
+      if (field === 'quantity') { value = parseInt(value, 10) || 1; }
+      if (field === 'price') {
+        value = parseFloat(value);
+        if (isNaN(value)) value = null;
+        el.classList.toggle('low-confidence', value === null);   // clear the yellow once filled
+      }
       if (field === 'displayName') {
         var m = value.match(/^(.+?)\s*\((.+)\)$/);
         if (m) { items[idx].name = m[1]; items[idx].spec = m[2]; }
@@ -1033,6 +1071,9 @@ function renderEditor() {
       }
 
       items[idx][field] = value;
+    }
+    ['input', 'change'].forEach(function(evt) {
+      el.addEventListener(evt, function() { applyField(); updateSummary(); });
     });
   });
 
@@ -1055,8 +1096,12 @@ function deleteItem(idx) {
 
 function updateSummary() {
   var total = items.reduce(function(sum, i) { return sum + (i.price || 0) * (i.quantity || 1); }, 0);
+  var over = items.length > MAX_ITEMS
+    ? ' <span style="color:#c62828;">· only the first ' + MAX_ITEMS + ' are written to the form ('
+      + (items.length - MAX_ITEMS) + ' over the limit)</span>'
+    : '';
   document.getElementById('summary-bar').innerHTML =
-    '<span>Total: ¥' + total.toFixed(2) + ' | ' + items.length + ' items</span>' +
+    '<span>Total: ¥' + total.toFixed(2) + ' | ' + items.length + ' items' + over + '</span>' +
     '<button id="btn-export" style="padding:10px 24px; background:#2e7d32; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer;">Export Excel</button>';
   document.getElementById('btn-export').addEventListener('click', exportExcel);
 }

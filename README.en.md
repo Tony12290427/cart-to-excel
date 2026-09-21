@@ -26,6 +26,8 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
    If it is followed by `| QTY from clipboard HTML`, the quantities were recovered from the HTML (see below).
 7. Check and fix: item name, QTY, unit price, Type category, Link. `×` on the right deletes a row.
    Cells whose price could not be parsed are highlighted yellow and need to be filled in by hand.
+   Edits update the running total **immediately**, and the paste box below the table lets you
+   **paste more items at any time — they are appended to the end of the list**.
 8. Click **Export Excel** → downloads `YYYYMMDD <Competition Name> order form.xlsx`
    (e.g. `20260628 Go-Kart Extra order form.xlsx`; with Competition blank it is
    `20260628 order form.xlsx`).
@@ -113,8 +115,9 @@ Other conventions:
 
 ## Known limitations
 
-- **30 items maximum**: parsing stops at the 30th item; anything beyond is not written (the template
-  only has 30 rows).
+- **The form holds 30 items** (template rows 11-40). Pasting again appends without limit, but rows
+  past 30 are greyed out and marked ⚠, the summary reports how many are over, and **only the first
+  30 are written to the form**. (A single paste still parses at most 30 items.)
 - **Depends on Taobao's page structure**: most visible in the HTML quantity fallback; a redesign may
   require adjusting `extractQuantitiesFromHTML`.
 - **Links are positional**: they are extracted in document order and assigned to items in sequence;
