@@ -6,12 +6,6 @@
 <title>Cart to Order Form</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<!-- Handwriting faces for the generated signature (both SIL Open Font License).
-     Purely an enhancement: if the CDN is unreachable, the canvas falls back to
-     the handwriting faces already installed on the system. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -81,17 +75,15 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     </div>
   </div>
   <div id="signature-box" style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:16px 20px; margin-bottom:20px;">
-    <label style="font-size:13px; color:#666;">Signature <span style="color:#aaa;">(optional — written into the "Sign of student" cell of the form)</span></label>
+    <label style="font-size:13px; color:#666;">Signature <span style="color:#aaa;">(optional — sign below with your mouse or trackpad; it is written into the "Sign of student" cell)</span></label>
+    <canvas id="signature-pad" style="display:block; width:100%; margin-top:8px; border:1px dashed #ccc; border-radius:6px; background:#fff; touch-action:none; cursor:crosshair;"></canvas>
     <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">
-      <input id="input-signature-text" type="text" placeholder="Type your name, then Generate" style="flex:1; min-width:180px; padding:8px 12px; border:1px solid #ddd; border-radius:4px; font-size:14px;">
-      <select id="select-signature-style" title="Signature style" style="padding:8px; border:1px solid #ddd; border-radius:4px; font-size:13px; background:#fff;"></select>
-      <button id="btn-sign-generate" style="padding:8px 16px; background:#4a90d9; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:14px;">Generate</button>
-      <button id="btn-sign-upload" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Upload image</button>
+      <button id="btn-sign-undo" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Undo</button>
       <button id="btn-sign-clear" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Clear</button>
+      <button id="btn-sign-upload" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Upload image</button>
       <input id="input-signature-file" type="file" accept="image/*" style="display:none;">
+      <span style="font-size:12px; color:#999;">Draw in the box above · Undo removes the last stroke · Upload uses a photo of your real signature instead</span>
     </div>
-    <div id="signature-preview" style="margin-top:12px; min-height:56px; border:1px dashed #ddd; border-radius:6px; padding:8px; display:flex; align-items:center; justify-content:center; color:#bbb; font-size:13px;">No signature yet — generate one or upload an image</div>
-    <div id="signature-font-note" style="margin-top:6px; font-size:12px; color:#b26a00;"></div>
   </div>
   <div id="paste-area">
     <div class="paste-zone" id="paste-zone">
@@ -570,42 +562,123 @@ function setCellXML(sheetXML, ref, cellXml) {
   return sheetXML.replace(rowRe, function() { return m[1] + newBody + m[3]; });
 }
 
-// === SIGNATURE ===
+// === SIGNATURE PAD ===
+// The signature is drawn by hand on a canvas, so no font (and no network) is
+// needed. Pointer events cover mouse, trackpad, touch and stylus alike.
 
-// Both faces are SIL Open Font License, so using and embedding them is fine.
-// A stack starts with its webfont and falls back to handwriting faces already
-// installed on macOS, then to generic cursive.
-var SIGNATURE_STYLES = [
-  { label: 'Everyday pen',   font: '"Dancing Script", "SignPainter", "Bradley Hand", "Brush Script MT", cursive', slant: -0.035 },
-  { label: 'Flowing script', font: '"Great Vibes", "Snell Roundhand", "Apple Chancery", cursive', slant: -0.05 },
-];
-
+var PAD_W = 1000;              // fixed internal resolution, so the exported
+var PAD_H = 300;               // aspect ratio never depends on the window size
+var padStrokes = [];           // strokes = arrays of {x, y} in canvas units
+var padImage = null;           // or an uploaded signature (a canvas)
+var padDrawing = false;
 var signatureDataUrl = null;
-var signatureAspect = 4;      // width / height of the current signature image
+var signatureAspect = 4;       // width / height of the current signature
 
-// Draw the whole string in one fillText: script faces rely on ligatures and
-// connecting strokes, which per-character rendering would break apart.
-function renderSignature(text, styleIndex) {
-  var style = SIGNATURE_STYLES[styleIndex] || SIGNATURE_STYLES[0];
-  var fontSize = 110;
-  var pad = 24;
+function padEl() { return document.getElementById('signature-pad'); }
 
-  var probe = document.createElement('canvas').getContext('2d');
-  probe.font = '400 ' + fontSize + 'px ' + style.font;
-  var textWidth = Math.max(probe.measureText(text).width, fontSize);
+function padPoint(e) {
+  var c = padEl(), r = c.getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) * (c.width / r.width),
+    y: (e.clientY - r.top) * (c.height / r.height),
+  };
+}
 
-  var canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(textWidth + pad * 2);
-  canvas.height = Math.ceil(fontSize * 1.7);
-  var ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = '400 ' + fontSize + 'px ' + style.font;
+// A mouse or trackpad gives jittery polylines; drawing quadratic curves through
+// the midpoints of consecutive segments turns them into one smooth ink line.
+function strokePath(ctx, pts, dx, dy) {
+  if (pts.length === 1) {
+    ctx.beginPath();
+    ctx.arc(pts[0].x - dx, pts[0].y - dy, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x - dx, pts[0].y - dy);
+  for (var i = 1; i < pts.length - 1; i++) {
+    ctx.quadraticCurveTo(
+      pts[i].x - dx, pts[i].y - dy,
+      (pts[i].x + pts[i + 1].x) / 2 - dx, (pts[i].y + pts[i + 1].y) / 2 - dy);
+  }
+  var last = pts[pts.length - 1];
+  ctx.lineTo(last.x - dx, last.y - dy);
+  ctx.stroke();
+}
+
+// Bounding box of the ink, padded so the pen width is not clipped away.
+function padInkBounds() {
+  if (!padStrokes.length) return null;
+  var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  padStrokes.forEach(function(stroke) {
+    stroke.forEach(function(p) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    });
+  });
+  var margin = PAD_W * 0.012;
+  return { x: minX - margin, y: minY - margin,
+           w: (maxX - minX) + margin * 2, h: (maxY - minY) + margin * 2 };
+}
+
+function padPaint(ctx, dx, dy) {
+  ctx.strokeStyle = '#111';
   ctx.fillStyle = '#111';
-  ctx.textBaseline = 'alphabetic';
-  ctx.translate(pad, canvas.height * 0.7);
-  ctx.rotate(style.slant);
-  ctx.fillText(text, 0, 0);
-  return canvas;
+  ctx.lineWidth = Math.round(PAD_W * 0.009);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  padStrokes.forEach(function(stroke) { strokePath(ctx, stroke, dx, dy); });
+}
+
+function padRedraw() {
+  var c = padEl();
+  var ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+
+  if (padImage) {                       // uploaded photo, fitted for preview
+    var scale = Math.min(c.width / padImage.width, c.height / padImage.height);
+    var w = padImage.width * scale, h = padImage.height * scale;
+    ctx.drawImage(padImage, (c.width - w) / 2, (c.height - h) / 2, w, h);
+    signatureDataUrl = padImage.toDataURL('image/png');
+    signatureAspect = padImage.width / padImage.height;
+    return;
+  }
+
+  padPaint(ctx, 0, 0);
+
+  var bounds = padInkBounds();
+  if (!bounds) { signatureDataUrl = null; signatureAspect = 4; return; }
+
+  // Export only the inked area, so the picture has no dead space around it.
+  var out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round(bounds.w));
+  out.height = Math.max(1, Math.round(bounds.h));
+  padPaint(out.getContext('2d'), bounds.x, bounds.y);
+  signatureDataUrl = out.toDataURL('image/png');
+  signatureAspect = out.width / out.height;
+}
+
+function padClear() {
+  padStrokes = [];
+  padImage = null;
+  document.getElementById('input-signature-file').value = '';
+  padRedraw();
+}
+
+function padUndo() {
+  if (padStrokes.length) padStrokes.pop();
+  else if (padImage) padImage = null;
+  else return;
+  padRedraw();
+}
+
+// Keep the on-screen pad at the same aspect ratio as the drawing surface, or a
+// signature would look one shape while drawing and another in the workbook.
+function padFit() {
+  var c = padEl();
+  var width = c.clientWidth || 600;
+  c.style.height = Math.round(width * PAD_H / PAD_W) + 'px';
 }
 
 // Turn a photo/scan of a signature into a transparent PNG: near-white becomes
@@ -642,42 +715,6 @@ function traceSignatureImage(img) {
   crop.height = maxY - minY + 1 + pad * 2;
   crop.getContext('2d').drawImage(canvas, -minX + pad, -minY + pad);
   return crop;
-}
-
-function setSignature(dataUrl, aspect) {
-  signatureDataUrl = dataUrl;
-  signatureAspect = aspect > 0 ? aspect : 4;
-  var preview = document.getElementById('signature-preview');
-  preview.innerHTML = '';
-  preview.style.border = '1px dashed #ddd';
-  var img = document.createElement('img');
-  img.src = dataUrl;
-  img.style.maxWidth = '100%';
-  img.style.maxHeight = '90px';
-  preview.appendChild(img);
-}
-
-// Warn when the handwriting webfont behind a style is unavailable, because the
-// canvas then silently falls back to a plain system font that looks nothing
-// like a signature (most likely on networks where Google Fonts is blocked).
-function signatureFontNote(style) {
-  var primary = style.font.match(/"([^"]+)"/);
-  if (!primary || !document.fonts || !document.fonts.check) return '';
-  var name = primary[1];
-  var loaded = false;
-  try { loaded = document.fonts.check('110px "' + name + '"'); } catch (e) { loaded = true; }
-  if (loaded) return '';
-  return '⚠️ 手写体 "' + name + '" 没能加载（多半是网络问题），当前用的是系统回退字体。'
-    + '可以改用 "Upload image" 上传真实签名，或换个风格试试。';
-}
-
-function clearSignature() {
-  signatureDataUrl = null;
-  signatureAspect = 4;
-  document.getElementById('input-signature-file').value = '';
-  document.getElementById('signature-font-note').textContent = '';
-  var preview = document.getElementById('signature-preview');
-  preview.innerHTML = 'No signature yet — generate one or upload an image';
 }
 
 // Stamp the signature into the workbook. The template already ships a drawing
@@ -727,40 +764,50 @@ function embedSignature(zip) {
   });
 }
 
-// Style dropdown + buttons
-(function initSignatureUI() {
-  var styleSelect = document.getElementById('select-signature-style');
-  SIGNATURE_STYLES.forEach(function(style, idx) {
-    var option = document.createElement('option');
-    option.value = String(idx);
-    option.textContent = style.label;
-    styleSelect.appendChild(option);
-  });
-  document.getElementById('btn-sign-generate').addEventListener('click', function() {
-    var text = document.getElementById('input-signature-text').value.trim()
-      || document.getElementById('input-student').value.trim();
-    if (!text) {
-      alert('Type a name to generate a signature (or fill in Student Name first).');
-      return;
-    }
-    document.getElementById('input-signature-text').value = text;
-    var style = SIGNATURE_STYLES[parseInt(styleSelect.value, 10)] || SIGNATURE_STYLES[0];
-    var draw = function() {
-      var canvas = renderSignature(text, parseInt(styleSelect.value, 10));
-      setSignature(canvas.toDataURL('image/png'), canvas.width / canvas.height);
-      document.getElementById('signature-font-note').textContent = signatureFontNote(style);
-    };
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(draw);
-    } else {
-      draw();
-    }
+// Drawing pad wiring
+(function initSignaturePad() {
+  var c = padEl();
+  c.width = PAD_W;
+  c.height = PAD_H;
+  padFit();
+  window.addEventListener('resize', padFit);
+
+  c.addEventListener('pointerdown', function(e) {
+    if (e.button !== undefined && e.button > 0) return;   // primary button only
+    e.preventDefault();
+    padImage = null;                    // drawing replaces an uploaded image
+    padDrawing = true;
+    if (c.setPointerCapture) { try { c.setPointerCapture(e.pointerId); } catch (err) {} }
+    padStrokes.push([padPoint(e)]);
+    padRedraw();
   });
 
+  c.addEventListener('pointermove', function(e) {
+    if (!padDrawing) return;
+    e.preventDefault();
+    var points = padStrokes[padStrokes.length - 1];
+    var p = padPoint(e);
+    var prev = points[points.length - 1];
+    if (Math.abs(p.x - prev.x) + Math.abs(p.y - prev.y) < 1.5) return;  // drop jitter
+    points.push(p);
+    padRedraw();
+  });
+
+  function endStroke() {
+    if (!padDrawing) return;
+    padDrawing = false;
+    padRedraw();
+  }
+  c.addEventListener('pointerup', endStroke);
+  c.addEventListener('pointercancel', endStroke);
+  c.addEventListener('pointerleave', endStroke);
+  c.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
+  document.getElementById('btn-sign-undo').addEventListener('click', padUndo);
+  document.getElementById('btn-sign-clear').addEventListener('click', padClear);
   document.getElementById('btn-sign-upload').addEventListener('click', function() {
     document.getElementById('input-signature-file').click();
   });
-
   document.getElementById('input-signature-file').addEventListener('change', function(e) {
     var file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -768,8 +815,9 @@ function embedSignature(zip) {
     reader.onload = function(ev) {
       var img = new Image();
       img.onload = function() {
-        var canvas = traceSignatureImage(img);
-        setSignature(canvas.toDataURL('image/png'), canvas.width / canvas.height);
+        padImage = traceSignatureImage(img);
+        padStrokes = [];
+        padRedraw();
       };
       img.onerror = function() { alert('Could not read that image file.'); };
       img.src = ev.target.result;
@@ -777,7 +825,7 @@ function embedSignature(zip) {
     reader.readAsDataURL(file);
   });
 
-  document.getElementById('btn-sign-clear').addEventListener('click', clearSignature);
+  padRedraw();
 })();
 
 function exportExcel() {

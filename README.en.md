@@ -9,13 +9,12 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
 ## How to use
 
 1. Open the page (the URL above, or double-click `index.html` locally).
-   ⚠️ An internet connection is required: the page loads JSZip from a CDN, and the
-   generated signature additionally loads its handwriting font from Google Fonts
-   (if that fails the page says so and falls back to a system handwriting face).
+   ⚠️ An internet connection is required: the page loads JSZip from a CDN (needed
+   only for the export step).
 2. Fill in **Competition Name** (goes to cell **C3**) and **Student Name** (goes to **H66**).
    Both are optional.
-3. (Optional) Add a signature: type a name and press **Generate**, or press **Upload image**
-   to use a picture of your real signature — see the next section.
+3. (Optional) Add a signature: **draw it with the mouse or trackpad** in the signature box,
+   or press **Upload image** to use a picture of your real signature — see the next section.
 4. On the Taobao cart page, select all and copy: `Ctrl+A` → `Ctrl+C` (`Cmd` on Mac).
 5. Back on this page, **click into the input box inside the dashed area first**, then press `Ctrl+V`.
    Use the keyboard shortcut: the page listens for the paste event, which carries both the plain-text
@@ -50,26 +49,25 @@ go through Notes once.
 
 ## Signature (optional)
 
-Two ways to provide one, both in the Signature row at the top of the page:
+Sign **directly with the mouse or trackpad** in the Signature row at the top of
+the page (touch and stylus work too):
 
-1. **Generate from a typed name**: enter the name, pick a style, press **Generate**.
-   - `Everyday pen` (default) — Dancing Script, looks like signing with a marker
-   - `Flowing script` — Great Vibes, a more formal calligraphic signature
-   - The faces load from Google Fonts; when that is unreachable the page warns you and
-     falls back to a system handwriting face (macOS ships SignPainter, Snell Roundhand, …)
-2. **Upload a real signature**: press **Upload image** and pick a photo or scan. The page
-   makes the white background transparent, crops to the ink, and embeds the result.
+- Press and drag inside the dashed box to write; the ink is smoothed as you go
+- **Undo** removes the last stroke, **Clear** empties the pad
+- **Upload image** switches to a photo or scan of a real signature instead (the
+  white background is made transparent and the image is cropped to the ink)
+- Only the inked area is exported, so the picture carries no dead space and is
+  never stretched
 
-Either way the signature is written into the `Sign of student` area (from H70) as an image
-when you export — there is nothing to paste into Excel by hand.
+The signature is written into the `Sign of student` area (from H70) as an image
+on export — there is nothing to paste into Excel by hand.
 
-> Why fonts instead of an AI handwriting model: the neural options that run client-side
-> ([sjvasquez/handwriting-synthesis](https://github.com/sjvasquez/handwriting-synthesis),
-> [tmarkovski/longhand](https://github.com/tmarkovski/longhand) and similar) do look more
-> hand-written, but **neither repository ships a LICENSE file** (so all rights are reserved
-> by default), and shipping multi-megabyte weights plus an inference runtime inside this
-> static page would make the first load noticeably slow. The font approach uses SIL OFL
-> licensed faces, needs no build step, works offline, and reads convincingly as a signature.
+> Earlier versions generated the signature from a typed name using a handwriting
+> font (Dancing Script / Great Vibes). That is gone: hand-writing looks like the
+> person, a font never does. It also removed the Google Fonts dependency, so the
+> page now needs no external resource other than JSZip. If you do want a
+> machine-generated hand, `tools/neural_signature.py` still works — generate a
+> PNG locally and bring it in with **Upload image**.
 
 ## Parser rules (read this before changing the code)
 

@@ -9,9 +9,9 @@
 ## 怎么用
 
 1. 打开页面（上面的网址，或本地双击 `index.html`）。
-   ⚠️ 需要联网：页面从 CDN 加载 JSZip；生成签名还需要 Google Fonts（加载不出会有提示，见下）。
+   ⚠️ 需要联网：页面从 CDN 加载 JSZip（只有导出那一步需要）。
 2. 填 **Competition Name**（写进表格 **C3**）和 **Student Name**（写进 **H66**）。可以留空。
-3. （可选）做签名：**输入名字点 Generate**，或点 **Upload image** 传自己的签名图，见下。
+3. （可选）签名：在签名框里**用鼠标/触控板直接手写**，或点 **Upload image** 传真实签名照片，见下。
 4. 到淘宝购物车页面全选复制：`Ctrl+A` → `Ctrl+C`（Mac 用 `Cmd`）。
 5. 回到本页面，**先用鼠标点一下虚线框里的输入框**，再按键盘 `Ctrl+V`。
    必须用键盘粘贴：代码监听 paste 事件，会同时读取纯文本和 HTML 两份数据，
@@ -41,25 +41,21 @@
 
 ## 签名（可选）
 
-两种做法，都在页面顶部的 Signature 一栏：
+在页面顶部的 Signature 栏里**直接用鼠标或触控板手写**签名（也可以用触屏/手写笔）：
 
-1. **输入名字生成**：填名字 → 选风格 → 点 **Generate**。
-   - `Everyday pen`（默认）：Dancing Script，像用马克笔签名
-   - `Flowing script`：Great Vibes，更花体的正式签名
-   - 字体会从 Google Fonts 加载；加载不出来时页面会给出提示并回退到系统手写体
-     （macOS 自带 SignPainter / Snell Roundhand 等，效果也不错）
-2. **上传真实签名**：点 **Upload image** 选一张照片或扫描件，
-   页面会自动把白底变透明、裁掉空白边，再嵌进表格。
+- 在虚线框里按住拖动即可书写，线条会自动平滑
+- **Undo** 撤销最后一笔，**Clear** 全部清空
+- **Upload image** 也可以改用真实签名的照片/扫描件（自动去白底、裁到墨迹）
+- 导出时只截取**有笔迹的部分**，所以图片里没有多余空白，也不会被拉变形
 
-生成的签名会作为图片写进 `Sign of student` 那一栏（H70 起），导出时嵌入 xlsx，
-不需要手动插入。
+签名会作为图片写进 `Sign of student` 那一栏（H70 起），导出时自动嵌入 xlsx，
+不需要手动往表格里插图片。
 
-> 为什么用字体而不是 AI 手写模型：调研过 Graves LSTM 类的手写合成
-> （[sjvasquez/handwriting-synthesis](https://github.com/sjvasquez/handwriting-synthesis)、
-> [tmarkovski/longhand](https://github.com/tmarkovski/longhand) 这类在浏览器里跑的神经笔迹引擎），
-> 效果确实更"手写"，但**这两个仓库都没有 LICENSE 文件**（默认保留所有权利），
-> 而且要把几 MB 的模型权重和推理运行时塞进这个静态页面，首次加载会明显变慢。
-> 现在的字体方案用的是 SIL OFL 授权的开源字体，零依赖、离线可用，签名的观感已经够用。
+> 早期版本用的是"输入名字 → 字体生成签名"（Dancing Script / Great Vibes）。
+> 那个方案已经移除，因为手写永远比字体更像本人签名；顺带也去掉了 Google Fonts 依赖，
+> 现在页面除了 JSZip 之外不需要任何外部资源。
+> 如果你想用 AI 生成手写签名，`tools/neural_signature.py` 仍然可用：在本地生成 PNG，
+> 再用 **Upload image** 传进来即可。
 
 ## 解析规则速查（改代码前先看这里）
 
