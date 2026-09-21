@@ -67,7 +67,10 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   <details id="how-to" style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:12px 20px; margin-bottom:20px;">
     <summary style="cursor:pointer; font-size:14px; font-weight:600; color:#1a1a1a; padding:4px 0;">📖 How to use — 2-minute walkthrough</summary>
     <ol style="margin:14px 0 0 20px; font-size:13px; line-height:1.9; color:#444;">
-      <li>On the Taobao/Tmall cart page select everything and copy: <b>Ctrl+A</b> → <b>Ctrl+C</b> (<b>Cmd</b> on Mac).</li>
+      <li>On the Taobao/Tmall cart page, drag-select <b>from the top of the first item you want</b>
+          down to <b>the end of the last one</b>, then press <b>Ctrl+C</b> (<b>Cmd+C</b> on Mac).
+          Do <b>not</b> use Ctrl+A — selecting the whole page drags in the settlement panel and
+          other parts the parser has no use for.</li>
       <li>Sign below with your mouse or trackpad, or press <b>Upload image</b> to use a photo of your signature.</li>
       <li>Fill in <b>Competition Name</b> and <b>Student Name</b> (they go into cells C3 and H66).</li>
       <li>Click into the paste box and press <b>Ctrl+V</b> — use the keyboard, not the right-click menu,
@@ -445,7 +448,7 @@ pasteInput.addEventListener('paste', function(e) {
   const html = e.clipboardData.getData('text/html');
 
   if (!plainText || plainText.trim().length === 0) {
-    showError('Please copy cart content first (Ctrl+A → Ctrl+C)');
+    showError('Copy the items you want from the cart first: select from the first item down to the last, then Ctrl+C');
     return;
   }
 

@@ -15,7 +15,9 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
    Both are optional.
 3. (Optional) Add a signature: **draw it with the mouse or trackpad** in the signature box,
    or press **Upload image** to use a picture of your real signature — see the next section.
-4. On the Taobao cart page, select all and copy: `Ctrl+A` → `Ctrl+C` (`Cmd` on Mac).
+4. On the Taobao cart page, **drag-select from the top of the first item you want down to the end of
+   the last one**, then press `Ctrl+C` (`Cmd+C` on Mac). **Do not use `Ctrl+A`** — selecting the whole
+   page drags in the settlement panel and other parts the parser has no use for.
 5. Back on this page, **click into the input box inside the dashed area first**, then press `Ctrl+V`.
    Use the keyboard shortcut: the page listens for the paste event, which carries both the plain-text
    and the HTML flavor. Pasting from the right-click menu can drop the HTML, losing the item links
