@@ -71,8 +71,8 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
           down to <b>the end of the last one</b>, then press <b>Ctrl+C</b> (<b>Cmd+C</b> on Mac).
           Do <b>not</b> use Ctrl+A — selecting the whole page drags in the settlement panel and
           other parts the parser has no use for.</li>
-      <li>Sign below with your mouse or trackpad, or press <b>Upload image</b> to use a photo of your signature.</li>
-      <li>Fill in <b>Competition Name</b> and <b>Student Name</b> (they go into cells C3 and H66).</li>
+      <li>Sign below with your mouse or trackpad, or press <b>Upload image</b> to use a photo of your signature. <b>(required)</b></li>
+      <li>Fill in <b>Competition Name</b> and <b>Student Name</b> <b>(required)</b> — they go into cells C3 and H66.</li>
       <li>Click into the paste box and press <b>Ctrl+V</b> — use the keyboard, not the right-click menu,
           otherwise the HTML flavour is dropped and item links and quantities are lost.</li>
       <li>Check the table (edit anything, <b>×</b> deletes a row), then press <b>Export Excel</b>.
@@ -88,16 +88,16 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   </details>
   <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 200px;">
-      <label style="font-size: 13px; color: #666;">Competition Name</label>
+      <label style="font-size: 13px; color: #666;">Competition Name <span style="color:#c62828;">*</span></label>
       <input id="input-competition" type="text" placeholder="e.g. AERC 2026" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
     </div>
     <div style="flex: 1; min-width: 200px;">
-      <label style="font-size: 13px; color: #666;">Student Name</label>
+      <label style="font-size: 13px; color: #666;">Student Name <span style="color:#c62828;">*</span></label>
       <input id="input-student" type="text" placeholder="e.g. Chan Tai Man" style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
     </div>
   </div>
   <div id="signature-box" style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:16px 20px; margin-bottom:20px;">
-    <label style="font-size:13px; color:#666;">Signature <span style="color:#aaa;">(optional — sign below with your mouse or trackpad; it is written into the "Sign of student" cell)</span></label>
+    <label style="font-size:13px; color:#666;">Signature <span style="color:#c62828;">*</span> <span style="color:#aaa;">(required — sign below with your mouse or trackpad; it is written into the "Sign of student" cell)</span></label>
     <canvas id="signature-pad" style="display:block; width:100%; margin-top:8px; border:1px dashed #ccc; border-radius:6px; background:#fff; touch-action:none; cursor:crosshair;"></canvas>
     <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">
       <button id="btn-sign-undo" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Undo</button>
@@ -446,6 +446,13 @@ const resultBar = document.getElementById('result-bar');
 // Bind restart button
 document.getElementById('btn-restart').addEventListener('click', clearAll);
 
+// Required fields drive the export button, so refresh it as they are filled in
+['input-competition', 'input-student'].forEach(function(id) {
+  document.getElementById(id).addEventListener('input', function() {
+    if (items.length) updateSummary();
+  });
+});
+
 // === PASTE HANDLER ===
 
 // One code path for both boxes: the first paste replaces the list, pasting into
@@ -684,6 +691,8 @@ function padPaint(ctx, dx, dy) {
   padStrokes.forEach(function(stroke) { strokePath(ctx, stroke, dx, dy); });
 }
 
+var hadSignature = false;
+
 function padRedraw() {
   var c = padEl();
   var ctx = c.getContext('2d');
@@ -695,13 +704,14 @@ function padRedraw() {
     ctx.drawImage(padImage, (c.width - w) / 2, (c.height - h) / 2, w, h);
     signatureDataUrl = padImage.toDataURL('image/png');
     signatureAspect = padImage.width / padImage.height;
+    syncSummaryAfterSignature();
     return;
   }
 
   padPaint(ctx, 0, 0);
 
   var bounds = padInkBounds();
-  if (!bounds) { signatureDataUrl = null; signatureAspect = 4; return; }
+  if (!bounds) { signatureDataUrl = null; signatureAspect = 4; syncSummaryAfterSignature(); return; }
 
   // Export only the inked area, so the picture has no dead space around it.
   var out = document.createElement('canvas');
@@ -710,6 +720,17 @@ function padRedraw() {
   padPaint(out.getContext('2d'), bounds.x, bounds.y);
   signatureDataUrl = out.toDataURL('image/png');
   signatureAspect = out.width / out.height;
+  syncSummaryAfterSignature();
+}
+
+// Called on every pointer move while drawing, so only touch the DOM when the
+// signature goes from absent to present (or back).
+function syncSummaryAfterSignature() {
+  if (!items.length) { hadSignature = !!signatureDataUrl; return; }
+  if (!!signatureDataUrl !== hadSignature) {
+    hadSignature = !!signatureDataUrl;
+    updateSummary();
+  }
 }
 
 function padClear() {
@@ -884,6 +905,20 @@ function embedSignature(zip) {
 function exportExcel() {
   if (items.length === 0) {
     alert('No items to export');
+    return;
+  }
+
+  // The button is disabled while something is missing, but check again anyway
+  var missing = missingRequiredFields();
+  if (missing.length) {
+    updateSummary();
+    if (missing[0] === 'Competition Name') {
+      document.getElementById('input-competition').focus();
+    } else if (missing[0] === 'Student Name') {
+      document.getElementById('input-student').focus();
+    } else {
+      document.getElementById('signature-pad').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     return;
   }
 
@@ -1094,16 +1129,47 @@ function deleteItem(idx) {
   renderEditor();
 }
 
+// Competition name, student name and signature must all be present: they are
+// the parts of the form nobody can fill in for you afterwards.
+function missingRequiredFields() {
+  var missing = [];
+  if (!document.getElementById('input-competition').value.trim()) missing.push('Competition Name');
+  if (!document.getElementById('input-student').value.trim()) missing.push('Student Name');
+  if (!signatureDataUrl) missing.push('Signature');
+  return missing;
+}
+
+function markMissingFields(missing) {
+  [['input-competition', 'Competition Name'], ['input-student', 'Student Name']].forEach(function(pair) {
+    var el = document.getElementById(pair[0]);
+    var lacking = missing.indexOf(pair[1]) >= 0;
+    el.style.borderColor = lacking ? '#e57373' : '#ddd';
+    el.style.background = lacking ? '#fff6f6' : '#fff';
+  });
+  var pad = document.getElementById('signature-pad');
+  if (pad) pad.style.borderColor = missing.indexOf('Signature') >= 0 ? '#e57373' : '#ccc';
+}
+
 function updateSummary() {
   var total = items.reduce(function(sum, i) { return sum + (i.price || 0) * (i.quantity || 1); }, 0);
   var over = items.length > MAX_ITEMS
     ? ' <span style="color:#c62828;">· only the first ' + MAX_ITEMS + ' are written to the form ('
       + (items.length - MAX_ITEMS) + ' over the limit)</span>'
     : '';
+  var missing = missingRequiredFields();
+  var blocked = missing.length > 0;
   document.getElementById('summary-bar').innerHTML =
     '<span>Total: ¥' + total.toFixed(2) + ' | ' + items.length + ' items' + over + '</span>' +
-    '<button id="btn-export" style="padding:10px 24px; background:#2e7d32; color:#fff; border:none; border-radius:4px; font-size:15px; cursor:pointer;">Export Excel</button>';
+    '<span style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">' +
+      (blocked
+        ? '<span style="color:#c62828; font-size:13px;">⚠ Fill in to export: ' + missing.join(', ') + '</span>'
+        : '') +
+      '<button id="btn-export"' + (blocked ? ' disabled' : '') +
+        ' style="padding:10px 24px; background:' + (blocked ? '#bdbdbd' : '#2e7d32') + '; color:#fff; border:none;' +
+        ' border-radius:4px; font-size:15px; cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';">Export Excel</button>' +
+    '</span>';
   document.getElementById('btn-export').addEventListener('click', exportExcel);
+  markMissingFields(missing);
 }
 
 </script>

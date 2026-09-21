@@ -12,9 +12,10 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
    ⚠️ An internet connection is required: the page loads JSZip from a CDN (needed
    only for the export step).
 2. Fill in **Competition Name** (goes to cell **C3**) and **Student Name** (goes to **H66**).
-   Both are optional.
-3. (Optional) Add a signature: **draw it with the mouse or trackpad** in the signature box,
-   or press **Upload image** to use a picture of your real signature — see the next section.
+3. Add a signature: **draw it with the mouse or trackpad** in the signature box, or press
+   **Upload image** to use a picture of your real signature — see the next section.
+   ⚠️ **All three are required**: until they are filled in the **Export Excel button stays greyed
+   out**, and the summary bar lists in red what is still missing.
 4. On the Taobao cart page, **drag-select from the top of the first item you want down to the end of
    the last one**, then press `Ctrl+C` (`Cmd+C` on Mac). **Do not use `Ctrl+A`** — selecting the whole
    page drags in the settlement panel and other parts the parser has no use for.
@@ -28,7 +29,8 @@ Live: **https://tony12290427.github.io/cart-to-excel/**
    Cells whose price could not be parsed are highlighted yellow and need to be filled in by hand.
    Edits update the running total **immediately**, and the paste box below the table lets you
    **paste more items at any time — they are appended to the end of the list**.
-8. Click **Export Excel** → downloads `YYYYMMDD <Competition Name> order form.xlsx`
+8. Click **Export Excel** (it only lights up once the three required fields are filled) → downloads
+   `YYYYMMDD <Competition Name> order form.xlsx`
    (e.g. `20260628 Go-Kart Extra order form.xlsx`; with Competition blank it is
    `20260628 order form.xlsx`).
 
