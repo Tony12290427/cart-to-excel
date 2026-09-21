@@ -188,6 +188,37 @@ Two limitations:
   the files **and rewriting git history**. Get the author's permission before
   going further, e.g. embedding the model in the published web page.
 
+## Walkthrough video
+
+A collapsible **📖 How to use** panel sits at the top of the page: five steps plus a
+two-minute screen recording (`media/how-to.mp4`, with a poster frame).
+
+**How it was compressed**: the raw recording is 105.7 s, 2590x1544 @ 39 fps,
+11.5 Mbps — **144 MB**. macOS's own `avconvert` cannot get there (`Preset960x540`
+still weighs 55.6 MB, because Apple's presets target playback quality rather than
+web size), so `tools/shrink_video.swift` drives AVAssetWriter directly:
+
+```bash
+swift tools/shrink_video.swift raw-recording.mov media/how-to.mp4 1280 15 400
+#                                      input             output       width fps kbps
+```
+
+Downscale + drop the frame rate + set an explicit bitrate took **144 MB to 5.4 MB**
+(27x smaller) while keeping the full duration and legible text, with faststart
+enabled (moov first, so it plays while still downloading). Re-run that command
+after recording a new one.
+
+**To keep the video out of the repository instead**, change one line:
+
+| Where | What to change |
+|---|---|
+| YouTube / Bilibili (no repo weight, can be unlisted) | replace the whole `<video>…</video>` block with `<iframe src="https://www.youtube.com/embed/VIDEO_ID" allowfullscreen></iframe>` |
+| GitHub Release asset (no git history, takes a minute) | create a Release, drag `how-to.mp4` in, then point `<source src="...">` at the asset URL |
+| Your own bucket / CDN | same — just use the direct URL |
+
+> Note: once `media/how-to.mp4` is committed it stays in git history forever.
+> Switching to an external URL only makes *future* clones smaller.
+
 ## Changing the template
 
 `index.html` hard-codes the entire `template.xlsx` as base64 in the `TEMPLATE_B64` constant, so

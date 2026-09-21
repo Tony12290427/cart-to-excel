@@ -157,6 +157,34 @@ python3 -m venv .venv-neural
   要求把该 checkpoint 一并提交（`tools/model/`），属于未授权再分发——如果作者提出异议，需要删除文件
   **并重写 git 历史**才能彻底移除。若要进一步把模型嵌进网页公开放出去，建议先取得作者授权。
 
+## 使用说明视频
+
+页面顶部有一个可折叠的 **📖 How to use** 面板，里面是 5 步说明 + 一段 2 分钟的演示录屏
+（`media/how-to.mp4`，带封面图）。
+
+**视频是怎么压的**：原始录屏 105.7 秒、2590×1544 @ 39fps、11.5 Mbps，共 **144 MB**。
+macOS 自带的 `avconvert` 预设压不动（`Preset960x540` 出来还有 55.6 MB，因为苹果预设是按播放质量
+而不是网页体积调的），所以用 `tools/shrink_video.swift` 直接调 AVAssetWriter 编码：
+
+```bash
+swift tools/shrink_video.swift 原始录屏.mov media/how-to.mp4 1280 15 400
+#                                       输入            输出        宽  帧率 kbps
+```
+
+缩放 + 降帧 + 显式码率，**144 MB → 5.4 MB**（缩小 27 倍），时长和文字清晰度都保留，
+并开启 faststart（moov 前置，可边下边播）。重新录屏后照这条命令再跑一次即可。
+
+**如果不想让视频占仓库体积**，可以把它放到别处再改一行：
+
+| 放哪 | 怎么改 |
+|---|---|
+| YouTube / Bilibili（不占仓库、可设不公开） | 把 `<video>…</video>` 整块换成 `<iframe src="https://www.youtube.com/embed/视频ID" allowfullscreen></iframe>` |
+| GitHub Release 附件（不占 git 历史，约 1 分钟） | 建一个 Release 把 `how-to.mp4` 拖进去，然后把 `<source src="media/how-to.mp4">` 换成附件地址 |
+| 自己的对象存储 / CDN | 同上，直接换成直链 |
+
+> 注意：`media/how-to.mp4` 一旦提交就永久留在 git 历史里，换外链也只会让**以后**的 clone 变小，
+> 已提交的那 5.4 MB 仍在历史中（要彻底去掉得重写历史）。
+
 ## 改模板
 
 `index.html` 把整个 `template.xlsx` 以 base64 硬编码在 `TEMPLATE_B64` 常量里，
