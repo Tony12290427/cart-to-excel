@@ -118,6 +118,11 @@ Other conventions:
 - **The form holds 30 items** (template rows 11-40). Pasting again appends without limit, but rows
   past 30 are greyed out and marked ⚠, the summary reports how many are over, and **only the first
   30 are written to the form**. (A single paste still parses at most 30 items.)
+  **Why 30 cannot simply be raised to 60**: rows 11-40 carry pre-printed numbers `1…30`, and every
+  subtotal formula hard-codes its range (`SUMIF($G$10:$G$40, …)`, `SUM(H11:H40)`,
+  `SUMIF($K$10:$K$40, …)`). Inserted rows would be counted by none of them, so the form would show
+  **wrong amounts**. Growing it means editing formulas, styles and the signature/date rows too —
+  i.e. changing the structure of an official form, which is why it is left alone.
 - **Depends on Taobao's page structure**: most visible in the HTML quantity fallback; a redesign may
   require adjusting `extractQuantitiesFromHTML`.
 - **Links are positional**: they are extracted in document order and assigned to items in sequence;
