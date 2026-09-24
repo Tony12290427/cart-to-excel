@@ -231,6 +231,42 @@ after recording a new one.
 > Note: once `media/how-to.mp4` is committed it stays in git history forever.
 > Switching to an external URL only makes *future* clones smaller.
 
+## Saving straight to Google Drive (optional, one-time setup)
+
+Besides downloading the file you can file it **directly into a Drive folder**. A
+static page cannot write to Drive on its own, so it needs a small service that
+signs on your behalf — a Google Apps Script is the least painful option: **no
+Google Cloud project, no OAuth client, no verification, and no consent popup for
+anyone on the team**.
+
+### One-time setup (about 5 minutes, must be done from your own Google account)
+
+1. Open https://script.google.com → **New project**
+2. Paste all of `tools/drive-upload.gs` over `Code.gs`
+   (`FOLDER_ID` already points at your folder — leave it)
+3. Change `TOKEN` to any random string, and make sure the page uses the same one
+4. **Deploy → New deployment → Web app**:
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+   - Approve the consent screen (it is your own script)
+5. Copy the `/exec` URL into `DRIVE_UPLOAD_URL` at the top of `index.html`
+
+Once configured, a **Save to Drive** button appears next to Export Excel; it
+reports the saved file name and offers an "open file" link.
+
+### Worth knowing
+
+- **Uploads are owned by whoever deployed the script** (you) and count against
+  that account's storage. Share the folder with the team; keep the URL inside it.
+- **The same file name replaces the previous copy**, so a student exporting twice
+  does not leave two submissions behind (the old one goes to the trash).
+- **`TOKEN` only deters scanners**, it is not real security — the page is public,
+  so its source reveals it. Rotate it by editing both sides.
+- With `DRIVE_UPLOAD_URL` empty the button is **not rendered at all**, so the
+  feature simply does not exist until it is configured.
+- Debugging: run `testWrite()` once in the script editor. If it can write a file,
+  the folder id and permissions are right.
+
 ## Changing the template
 
 `index.html` hard-codes the entire `template.xlsx` as base64 in the `TEMPLATE_B64` constant, so
