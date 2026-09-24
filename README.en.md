@@ -254,6 +254,22 @@ anyone on the team**.
 Once configured, a **Save to Drive** button appears next to Export Excel; it
 reports the saved file name and offers an "open file" link.
 
+### Hardening: why the name and the bytes are checked too
+
+The page lives in a public repository, so **the URL and the TOKEN are both
+readable by anyone**. A token alone would still let whoever finds the URL use the
+endpoint as free file hosting and launder it through `drive.google.com`'s
+reputation — a real, documented abuse pattern. So the script also checks:
+
+| Check | What it stops |
+|---|---|
+| Name must match `^\\d{8}( .+)? order form\\.xlsx$` | arbitrary files such as `payload.exe` or `shell.php` |
+| Body must be a ZIP containing `xl/workbook.xml` | anything merely pretending to be an xlsx; a real xlsx cannot carry VBA macros (that would be .xlsm), so whatever passes is a plain spreadsheet |
+| At most 50 uploads per day | bulk use of the endpoint |
+
+Rejections are reported on the page (e.g. `unexpected file name: …`) rather than
+failing silently.
+
 ### Worth knowing
 
 - **Uploads are owned by whoever deployed the script** (you) and count against

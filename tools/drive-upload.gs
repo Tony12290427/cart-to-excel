@@ -35,6 +35,13 @@
 var FOLDER_ID = '1EC0L0S0kHn8UAIEY-nukXsTujPfX2ImG';   // ← your folder
 var TOKEN = 'change-me-to-something-random';            // ← must match index.html
 var MAX_BYTES = 8 * 1024 * 1024;                        // 8 MB is plenty for a form
+var MAX_PER_DAY = 50;                                   // sandbox against bulk abuse
+
+// The page lives in a public repo, so both the URL and the token are readable by
+// anyone. These checks are what stop the endpoint being useful as free file hosting
+// on a trusted domain: only something that really is an order form gets written,
+// and only a limited number of times per day.
+var NAME_PATTERN = /^\d{8}( .+)? order form\.xlsx$/;
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -44,17 +51,40 @@ function doPost(e) {
     if (p.token !== TOKEN) return reply({ ok: false, error: 'bad token' });
     if (!p.data) return reply({ ok: false, error: 'no file data' });
 
+    // 1. daily cap — a real team submits a handful of forms, not hundreds
+    var props = PropertiesService.getScriptProperties();
+    var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    var countKey = 'uploads-' + today;
+    var used = Number(props.getProperty(countKey) || 0);
+    if (used >= MAX_PER_DAY) {
+      return reply({ ok: false, error: 'daily upload limit reached (' + MAX_PER_DAY + ')' });
+    }
+
     var bytes = Utilities.base64Decode(p.data);
     if (bytes.length > MAX_BYTES) {
       return reply({ ok: false, error: 'file too large (' + bytes.length + ' bytes)' });
     }
 
-    var name = String(p.filename || 'order form.xlsx')
+    // 2. it has to actually be an xlsx: ZIP magic, plus a workbook entry inside.
+    //    An xlsx cannot carry VBA macros (that would be .xlsm), so anything that
+    //    passes these two checks is a harmless spreadsheet whoever sent it.
+    if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4B ||
+        bytes[2] !== 0x03 || bytes[3] !== 0x04) {
+      return reply({ ok: false, error: 'not a zip/xlsx payload' });
+    }
+    if (!containsWorkbookEntry(bytes)) {
+      return reply({ ok: false, error: 'zip has no xl/workbook.xml — not an xlsx' });
+    }
+
+    // 3. and the name has to look like one of our forms
+    var name = String(p.filename || '')
       .replace(/[\\/:*?"<>|]/g, '')      // keep it a legal Drive file name
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 150);
-    if (!/\.xlsx$/i.test(name)) name += '.xlsx';
+    if (!NAME_PATTERN.test(name)) {
+      return reply({ ok: false, error: 'unexpected file name: ' + name.slice(0, 60) });
+    }
 
     var folder = DriveApp.getFolderById(FOLDER_ID);
 
@@ -72,6 +102,7 @@ function doPost(e) {
       name
     );
     var file = folder.createFile(blob);
+    props.setProperty(countKey, String(used + 1));
     return reply({
       ok: true,
       name: file.getName(),
@@ -96,6 +127,28 @@ function reply(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+/**
+ * Does the zip contain xl/workbook.xml? Walks the local file headers instead of
+ * unzipping: each entry begins with PK\x03\x04, and bytes 26-27 of that header
+ * hold the length of the entry name.
+ */
+function containsWorkbookEntry(bytes) {
+  var want = 'xl/workbook.xml';
+  for (var i = 0; i + 30 < bytes.length; i++) {
+    if (bytes[i] !== 0x50 || bytes[i + 1] !== 0x4B ||
+        bytes[i + 2] !== 0x03 || bytes[i + 3] !== 0x04) continue;
+    var nameLen = bytes[i + 26] + (bytes[i + 27] << 8);
+    if (nameLen <= 0 || nameLen > 200) continue;
+    var name = '';
+    for (var j = 0; j < nameLen && i + 30 + j < bytes.length; j++) {
+      name += String.fromCharCode(bytes[i + 30 + j]);
+    }
+    if (name === want) return true;
+  }
+  return false;
+}
+
 
 /** Run this once from the editor to check FOLDER_ID and permissions. */
 function testWrite() {
