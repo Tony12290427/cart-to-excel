@@ -270,12 +270,27 @@ reputation — a real, documented abuse pattern. So the script also checks:
 Rejections are reported on the page (e.g. `unexpected file name: …`) rather than
 failing silently.
 
+### What this endpoint can and cannot do
+
+| It can | It cannot |
+|---|---|
+| **create** a file in the folder | ❌ list what is in the folder (there is no listing code at all) |
+| add a suffix on a name clash (`… (2).xlsx`) | ❌ delete arbitrary files — trashing is limited to a same-name upload and is off by default |
+| return the name and link of the file it just wrote | ❌ read any existing file, or touch the folder itself |
+
+**On deletion**: the only destructive capability in the script is same-name
+replacement, and it is **off** by default (`REPLACE_SAME_NAME = false`). Left on,
+anyone holding the public URL could push a teammate's submission to the trash by
+guessing its name — the one way this endpoint could lose data. Off, the endpoint
+is purely additive: the worst case is extra files, never a missing one. (Flip the
+flag if you want the old behaviour, knowing that cost.)
+
 ### Worth knowing
 
 - **Uploads are owned by whoever deployed the script** (you) and count against
   that account's storage. Share the folder with the team; keep the URL inside it.
-- **The same file name replaces the previous copy**, so a student exporting twice
-  does not leave two submissions behind (the old one goes to the trash).
+- **A repeated export coexists** rather than replacing: you get `… order form.xlsx`
+  and `… order form (2).xlsx`. Delete one by hand when you reconcile them.
 - **`TOKEN` only deters scanners**, it is not real security — the page is public,
   so its source reveals it. Rotate it by editing both sides.
 - With `DRIVE_UPLOAD_URL` empty the button is **not rendered at all**, so the

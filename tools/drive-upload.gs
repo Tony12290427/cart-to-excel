@@ -37,6 +37,14 @@ var TOKEN = 'change-me-to-something-random';            // ← must match index.
 var MAX_BYTES = 8 * 1024 * 1024;                        // 8 MB is plenty for a form
 var MAX_PER_DAY = 50;                                   // sandbox against bulk abuse
 
+// Replace an existing file with the same name instead of keeping both?
+// OFF by default, and that default matters: trashing by name is the ONLY way
+// this endpoint could destroy anything, and anyone holding the public URL could
+// then overwrite a teammate's submission by guessing its name. With it off the
+// endpoint is purely additive — the worst case is extra files, never a lost one.
+// A re-export simply lands as "... (2).xlsx".
+var REPLACE_SAME_NAME = false;
+
 // The page lives in a public repo, so both the URL and the token are readable by
 // anyone. These checks are what stop the endpoint being useful as free file hosting
 // on a trusted domain: only something that really is an order form gets written,
@@ -88,12 +96,18 @@ function doPost(e) {
 
     var folder = DriveApp.getFolderById(FOLDER_ID);
 
-    // Same name = the same student exported again: replace, do not pile up copies
-    var previous = folder.getFilesByName(name);
+    // This endpoint must never be able to lose a file. If replacing is disabled
+    // (the default) a name clash is resolved by adding a suffix, so a second
+    // export from the same student coexists rather than deleting the first.
     var replaced = 0;
-    while (previous.hasNext()) {
-      previous.next().setTrashed(true);
-      replaced++;
+    if (REPLACE_SAME_NAME) {
+      var previous = folder.getFilesByName(name);
+      while (previous.hasNext()) {
+        previous.next().setTrashed(true);
+        replaced++;
+      }
+    } else {
+      name = unusedName(folder, name);
     }
 
     var blob = Utilities.newBlob(
@@ -126,6 +140,20 @@ function doGet() {
 function reply(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * "a.xlsx" -> "a (2).xlsx" when "a.xlsx" is already there, so nothing is ever
+ * overwritten. Only ever appends; never touches an existing file.
+ */
+function unusedName(folder, name) {
+  if (!folder.getFilesByName(name).hasNext()) return name;
+  var base = name.replace(/\.xlsx$/i, '');
+  for (var n = 2; n < 100; n++) {
+    var candidate = base + ' (' + n + ').xlsx';
+    if (!folder.getFilesByName(candidate).hasNext()) return candidate;
+  }
+  return base + ' ' + new Date().getTime() + '.xlsx';
 }
 
 /**
