@@ -89,6 +89,14 @@ Per-line classification order (`classifyLine` — the order matters):
 | 6 | Ambiguous short line (3–14 chars) | Decided by the **next meaningful line**: a product name follows ⇒ shop; otherwise ⇒ product (short-title protection) |
 | 7 | Everything else is noise | Promo lines such as 退货/优惠后/满减 |
 
+> ⚠️ Be careful how wide a promo keyword is: sellers put words like **`包邮`** at the
+> start of the product title itself (`包邮2倍热缩管…`), so filtering on it blindly
+> deletes the item and lets the shop name above it take its place. Promo words are
+> therefore split in two groups: discount/after-sale wording (退货, 立减, 直降, 礼金,
+> 满X减Y …) disqualifies a line of any length, while words that occur inside titles
+> (包邮, 信用卡, 支付) only disqualify short lines — and a leading 包邮 is stripped
+> from the name.
+
 Short lines like `版本号：新版本V2.4` used to be misread as shop names, and the scan aborted at any
 shop line, silently losing the price and spec. The scan now **only stops at the next product line**;
 shop lines no longer interrupt it.

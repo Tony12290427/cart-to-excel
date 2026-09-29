@@ -183,9 +183,25 @@ function classifyLine(line) {
   var t = line.trim();
   if (t.length === 0) return { type: 'blank' };
 
-  // Promo/furniture lines. 立减/直降/礼金/采购无忧 and 满X减Y only ever show up in
-  // Taobao's discount banners, which are long enough to look like product names.
-  var skipRe = /退货|退款|信用卡|支付|包邮|价保|假一赔|运费险|优惠后|满\d+件|满\d+减\d+|极速退款|不支持|立减|直降|礼金|采购无忧/;
+  // Promo/furniture lines, in two groups because they behave differently:
+  //
+  //  - discount and after-sale wording never appears in a product title, so it
+  //    disqualifies a line of any length (the banners are long enough to look
+  //    like product names);
+  //  - 包邮/信用卡/支付 DO appear inside real titles — sellers prefix titles with
+  //    "包邮", so "包邮2倍热缩管绝缘套管…" was being thrown away and the shop name
+  //    above it took its place. Those words only disqualify a short line.
+  var promoRe = /退货|退款|价保|假一赔|运费险|优惠后|满\d+件|满\d+减\d+|极速退款|不支持|立减|直降|礼金|采购无忧|补贴/;
+  var shortPromoRe = /包邮|信用卡|支付/;
+  var skipRe = { test: function(text) {
+    return promoRe.test(text) || (text.length <= 14 && shortPromoRe.test(text));
+  } };
+
+  // "包邮" is shipping boilerplate, not the product's name
+  var cleanName = function(text) {
+    var stripped = text.replace(/^【?包邮】?\s*/, '');
+    return stripped.length ? stripped : text;
+  };
 
   // Whole-line cart labels ("修改", "平台加补后", …) are never products
   if (CART_LABEL_RE.test(t)) return { type: 'noise' };
@@ -207,12 +223,12 @@ function classifyLine(line) {
   // must not be mistaken for an item. Anything shorter goes through the 'short'
   // branch below, where the following line decides what it was.
   if (t.length > 14 && !skipRe.test(t)) {
-    return { type: 'product', value: t };
+    return { type: 'product', value: cleanName(t) };
   }
 
   // Short line: shop name (逐飞科技智能车基地) or a short product title (舵机 SG90)
   if (t.length >= 3 && t.length <= 14 && !skipRe.test(t)) {
-    return { type: 'short', value: t };
+    return { type: 'short', value: cleanName(t) };
   }
 
   return { type: 'noise' };
