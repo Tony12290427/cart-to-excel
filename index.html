@@ -172,7 +172,7 @@ function preprocessPrice(text) {
 // the "修改" (edit) link and Taobao's price labels — 平台加补后, 店铺优惠后, 券后价,
 // 到手价 … They are short and are followed by a price, which is exactly the shape
 // of a short product title, so they have to be matched as whole lines.
-var CART_LABEL_RE = /^(修改|删除|实付款?|(平台|店铺|活动|直播|会员|新人)?(优惠|加补|补贴|立减|满减|折扣|券|红包|到手)(后价|后|价))$/;
+var CART_LABEL_RE = /^(修改|删除|实付款?|距.{0,8}降|(平台|店铺|活动|直播|会员|新人)?(优惠|加补|补贴|立减|满减|折扣|券|红包|到手)(后价|后|价))$/;
 
 // Classify each line into a typed token for the item-level state machine.
 // Order matters: price and qty before the length-based tests, and spec before
@@ -183,7 +183,9 @@ function classifyLine(line) {
   var t = line.trim();
   if (t.length === 0) return { type: 'blank' };
 
-  var skipRe = /退货|退款|信用卡|支付|包邮|价保|假一赔|运费险|优惠后|满\d+件|极速退款|不支持/;
+  // Promo/furniture lines. 立减/直降/礼金/采购无忧 and 满X减Y only ever show up in
+  // Taobao's discount banners, which are long enough to look like product names.
+  var skipRe = /退货|退款|信用卡|支付|包邮|价保|假一赔|运费险|优惠后|满\d+件|满\d+减\d+|极速退款|不支持|立减|直降|礼金|采购无忧/;
 
   // Whole-line cart labels ("修改", "平台加补后", …) are never products
   if (CART_LABEL_RE.test(t)) return { type: 'noise' };
@@ -200,8 +202,11 @@ function classifyLine(line) {
   var specMatch = t.match(/^([^\s：:]{2,6})[：:]\s*(.+)$/);
   if (specMatch) return { type: 'spec', label: specMatch[1], value: specMatch[2].trim() };
 
-  // Product name: long line (>10 chars), not a promo/skip line
-  if (t.length > 10 && !skipRe.test(t)) {
+  // Product name: clearly long line. The threshold is >14, not >10, because shop
+  // names run up to 14 characters ("金茂五金机械自动化企业店" is 11) and a shop name
+  // must not be mistaken for an item. Anything shorter goes through the 'short'
+  // branch below, where the following line decides what it was.
+  if (t.length > 14 && !skipRe.test(t)) {
     return { type: 'product', value: t };
   }
 

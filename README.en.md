@@ -85,7 +85,7 @@ Per-line classification order (`classifyLine` — the order matters):
 | 2 | Price `¥25` / `¥29.6` | Half-width `¥` also accepted; cross-line prices are merged in `preprocessPrice` |
 | 3 | Quantity: 1–4 plain digits | Checked before the shop rule, otherwise `100` becomes a shop name |
 | 4 | Spec: `label：value` (label 2–6 chars) | Generic rule, covers 颜色分类/版本号/飞机种类/商品规格/尺寸… |
-| 5 | Product name: longer than 10 chars and not a promo line | |
+| 5 | Product name: longer than 14 chars and not a promo line | the threshold has to be >14: shop names run up to 14 characters (`金茂五金机械自动化企业店` is 11), and a shop name must not become an item |
 | 6 | Ambiguous short line (3–14 chars) | Decided by the **next meaningful line**: a product name follows ⇒ shop; otherwise ⇒ product (short-title protection) |
 | 7 | Everything else is noise | Promo lines such as 退货/优惠后/满减 |
 
