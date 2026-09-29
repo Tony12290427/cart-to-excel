@@ -168,6 +168,12 @@ function preprocessPrice(text) {
     .replace(/[￥¥]\s*\n\s*(\d+)/g, '¥$1');
 }
 
+// Cart UI labels that sit between the spec and the price and are never products:
+// the "修改" (edit) link and Taobao's price labels — 平台加补后, 店铺优惠后, 券后价,
+// 到手价 … They are short and are followed by a price, which is exactly the shape
+// of a short product title, so they have to be matched as whole lines.
+var CART_LABEL_RE = /^(修改|删除|实付款?|(平台|店铺|活动|直播|会员|新人)?(优惠|加补|补贴|立减|满减|折扣|券|红包|到手)(后价|后|价))$/;
+
 // Classify each line into a typed token for the item-level state machine.
 // Order matters: price and qty before the length-based tests, and spec before
 // product. A line that is merely *short* stays ambiguous ('short'), because
@@ -178,6 +184,9 @@ function classifyLine(line) {
   if (t.length === 0) return { type: 'blank' };
 
   var skipRe = /退货|退款|信用卡|支付|包邮|价保|假一赔|运费险|优惠后|满\d+件|极速退款|不支持/;
+
+  // Whole-line cart labels ("修改", "平台加补后", …) are never products
+  if (CART_LABEL_RE.test(t)) return { type: 'noise' };
 
   // Price line: ¥25, ¥29.6, etc. (after preprocessPrice normalization)
   var priceMatch = t.match(/^[$￥¥]\s*(\d+\.?\d*)/);
