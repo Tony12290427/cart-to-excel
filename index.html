@@ -1141,7 +1141,9 @@ function uploadToDrive() {
     // The endpoint is cross-origin: a network/CORS failure looks like a generic
     // TypeError, so spell out the likely causes instead of echoing "Failed to fetch"
     var hint = /Failed to fetch|NetworkError|load failed/i.test(String(err))
-      ? 'could not reach the Apps Script (check the deployment is set to "Anyone" and the URL ends in /exec)'
+      ? 'could not reach the Apps Script — check the deployment access is "Anyone" and the URL ends in /exec.'
+        + ' If it runs as "User accessing the web app", the browser may be blocking the Google session'
+        + ' (third-party cookies): open the /exec URL in a tab once, approve it, then try again.'
       : err.message;
     setDriveStatus('⚠ Drive upload failed: ' + hint, '#c62828', '');
   }).then(function() {
