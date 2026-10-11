@@ -1087,7 +1087,6 @@ function exportExcel() {
 
 // === SAVE TO GOOGLE DRIVE ===
 
-var driveBusy = false;
 var driveStatusText = '';
 var driveStatusColor = '#2e7d32';
 var driveLinkUrl = '';
@@ -1108,47 +1107,48 @@ function setDriveStatus(text, color, url) {
   if (items.length) updateSummary();
 }
 
+// Google's web app runs as whoever is signed in, and a cross-origin fetch cannot
+// carry that session — the request would just be redirected to a login page, which
+// the browser reports as a network error. A top-level form submission can carry it,
+// so the upload opens in its own tab; that tab shows the outcome, and the first one
+// per person is where Google asks them to authorise the script.
 function uploadToDrive() {
   if (items.length === 0) { alert('No items to export'); return; }
   if (!requiredFieldsSatisfied()) return;
 
-  driveBusy = true;
-  setDriveStatus('Uploading to Drive…', '#666', '');
+  setDriveStatus('Preparing the file…', '#666', '');
 
   buildWorkbookBlob().then(function(blob) {
     return blobToBase64(blob).then(function(base64) {
-      var body = new URLSearchParams();
-      body.set('token', DRIVE_UPLOAD_TOKEN);
-      body.set('filename', workbookFilename());
-      body.set('data', base64);
-      // form-encoded keeps this a "simple request", so no CORS preflight
-      return fetch(DRIVE_UPLOAD_URL, { method: 'POST', body: body });
-    });
-  }).then(function(response) {
-    return response.text().then(function(text) {
-      var result;
-      try { result = JSON.parse(text); } catch (e) { result = null; }
-      if (!response.ok || !result) {
-        throw new Error('HTTP ' + response.status + ' — ' + text.slice(0, 200));
-      }
-      if (!result.ok) throw new Error(result.error || 'the script refused the upload');
-      setDriveStatus('✅ Saved to Drive: ' + result.name
-        + (result.replaced ? ' (replaced an earlier copy)' : '')
-        + (result.folder ? ' in “' + result.folder + '”' : ''), '#2e7d32', result.url || '');
+      var form = document.createElement('form');
+      form.method = 'POST';
+      form.action = DRIVE_UPLOAD_URL;
+      form.target = '_blank';                 // new tab = a top-level navigation
+      form.style.display = 'none';
+      [
+        ['token', DRIVE_UPLOAD_TOKEN],
+        ['filename', workbookFilename()],
+        ['data', base64],
+        ['nonce', 'n' + Date.now()],          // asks the script to answer with a page
+      ].forEach(function(pair) {
+        var field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = pair[0];
+        field.value = pair[1];
+        form.appendChild(field);
+      });
+      document.body.appendChild(form);
+      form.submit();
+      document.body.removeChild(form);
+
+      setDriveStatus('Opened in a new tab. The first time, Google asks you to allow '
+        + 'the upload — approve it and the file is saved under your own account. '
+        + 'Then close that tab and come back here.', '#2e7d32', '');
     });
   }).catch(function(err) {
     console.error('Drive upload failed:', err);
-    // The endpoint is cross-origin: a network/CORS failure looks like a generic
-    // TypeError, so spell out the likely causes instead of echoing "Failed to fetch"
-    var hint = /Failed to fetch|NetworkError|load failed/i.test(String(err))
-      ? 'could not reach the Apps Script — check the deployment access is "Anyone" and the URL ends in /exec.'
-        + ' If it runs as "User accessing the web app", the browser may be blocking the Google session'
-        + ' (third-party cookies): open the /exec URL in a tab once, approve it, then try again.'
-      : err.message;
-    setDriveStatus('⚠ Drive upload failed: ' + hint, '#c62828', '');
-  }).then(function() {
-    driveBusy = false;
-    if (items.length) updateSummary();
+    setDriveStatus('⚠ Could not prepare the upload: ' + (err && err.message ? err.message : err),
+      '#c62828', '');
   });
 }
 
@@ -1272,12 +1272,11 @@ function updateSummary() {
         ? '<span style="color:#c62828; font-size:13px;">⚠ Fill in to export: ' + missing.join(', ') + '</span>'
         : '') +
       (DRIVE_UPLOAD_URL
-        ? '<button id="btn-drive"' + (blocked || driveBusy ? ' disabled' : '') +
-            ' style="padding:10px 18px; background:' + (blocked || driveBusy ? '#bdbdbd' : '#fff') + '; color:' +
-            (blocked || driveBusy ? '#fff' : '#4a90d9') + '; border:1px solid ' +
-            (blocked || driveBusy ? '#bdbdbd' : '#4a90d9') + '; border-radius:4px; font-size:14px; cursor:' +
-            (blocked || driveBusy ? 'not-allowed' : 'pointer') + ';">' +
-            (driveBusy ? 'Uploading…' : 'Save to Drive') + '</button>'
+        ? '<button id="btn-drive"' + (blocked ? ' disabled' : '') +
+            ' style="padding:10px 18px; background:' + (blocked ? '#bdbdbd' : '#fff') + '; color:' +
+            (blocked ? '#fff' : '#4a90d9') + '; border:1px solid ' +
+            (blocked ? '#bdbdbd' : '#4a90d9') + '; border-radius:4px; font-size:14px; cursor:' +
+            (blocked ? 'not-allowed' : 'pointer') + ';">Save to Drive</button>'
         : '') +
       '<button id="btn-export"' + (blocked ? ' disabled' : '') +
         ' style="padding:10px 24px; background:' + (blocked ? '#bdbdbd' : '#2e7d32') + '; color:#fff; border:none;' +

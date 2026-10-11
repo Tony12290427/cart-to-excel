@@ -56,8 +56,8 @@ function doPost(e) {
   try {
     lock.waitLock(20000);
     var p = (e && e.parameter) || {};
-    if (p.token !== TOKEN) return reply({ ok: false, error: 'bad token' });
-    if (!p.data) return reply({ ok: false, error: 'no file data' });
+    if (p.token !== TOKEN) return respond({ ok: false, error: 'bad token' }, p);
+    if (!p.data) return respond({ ok: false, error: 'no file data' }, p);
 
     // 1. daily cap — a real team submits a handful of forms, not hundreds
     var props = PropertiesService.getScriptProperties();
@@ -65,12 +65,12 @@ function doPost(e) {
     var countKey = 'uploads-' + today;
     var used = Number(props.getProperty(countKey) || 0);
     if (used >= MAX_PER_DAY) {
-      return reply({ ok: false, error: 'daily upload limit reached (' + MAX_PER_DAY + ')' });
+      return respond({ ok: false, error: 'daily upload limit reached (' + MAX_PER_DAY + ')' }, p);
     }
 
     var bytes = Utilities.base64Decode(p.data);
     if (bytes.length > MAX_BYTES) {
-      return reply({ ok: false, error: 'file too large (' + bytes.length + ' bytes)' });
+      return respond({ ok: false, error: 'file too large (' + bytes.length + ' bytes)' }, p);
     }
 
     // 2. it has to actually be an xlsx: ZIP magic, plus a workbook entry inside.
@@ -78,10 +78,10 @@ function doPost(e) {
     //    passes these two checks is a harmless spreadsheet whoever sent it.
     if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4B ||
         bytes[2] !== 0x03 || bytes[3] !== 0x04) {
-      return reply({ ok: false, error: 'not a zip/xlsx payload' });
+      return respond({ ok: false, error: 'not a zip/xlsx payload' }, p);
     }
     if (!containsWorkbookEntry(bytes)) {
-      return reply({ ok: false, error: 'zip has no xl/workbook.xml — not an xlsx' });
+      return respond({ ok: false, error: 'zip has no xl/workbook.xml — not an xlsx' }, p);
     }
 
     // 3. and the name has to look like one of our forms
@@ -91,7 +91,7 @@ function doPost(e) {
       .trim()
       .slice(0, 150);
     if (!NAME_PATTERN.test(name)) {
-      return reply({ ok: false, error: 'unexpected file name: ' + name.slice(0, 60) });
+      return respond({ ok: false, error: 'unexpected file name: ' + name.slice(0, 60) }, p);
     }
 
     var folder = DriveApp.getFolderById(FOLDER_ID);
@@ -117,18 +117,59 @@ function doPost(e) {
     );
     var file = folder.createFile(blob);
     props.setProperty(countKey, String(used + 1));
-    return reply({
+    return respond({
       ok: true,
       name: file.getName(),
       url: file.getUrl(),
       replaced: replaced,
       folder: folder.getName()
-    });
+    }, p);
   } catch (err) {
-    return reply({ ok: false, error: String(err && err.message ? err.message : err) });
+    return respond({ ok: false, error: String(err && err.message ? err.message : err) }, p);
   } finally {
     try { lock.releaseLock(); } catch (ignored) {}
   }
+}
+
+/**
+ * How to answer. The page submits a form and lets the browser open it in a new
+ * tab, because a cross-origin fetch cannot carry the visitor's Google session —
+ * a top-level navigation can. That tab therefore gets a small HTML page, while
+ * API callers (curl, tests) asked without a nonce and still get JSON.
+ */
+function respond(result, p) {
+  if (!p || !p.nonce) return reply(result);
+
+  var name = escapeHtml(result.name || p.filename || '');
+  var folder = escapeHtml(result.folder || '');
+  var body = result.ok
+    ? '<h1>✅ Saved / 已保存</h1>'
+      + '<p><b>' + name + '</b></p>'
+      + (folder ? '<p>Folder / 文件夹：' + folder + '</p>' : '')
+      + (result.url ? '<p><a href="' + escapeHtml(result.url) + '" target="_blank" rel="noopener">'
+          + 'Open the file / 打开文件</a></p>' : '')
+      + '<p class="hint">You can close this tab and go back to the tool. / 可以关闭这个标签页，回到工具继续。</p>'
+    : '<h1>⚠ Upload failed / 上传失败</h1>'
+      + '<p>' + escapeHtml(result.error || 'unknown error') + '</p>'
+      + '<p class="hint">Send this message to whoever maintains the tool. / 把这句话发给维护者。</p>';
+
+  return HtmlService.createHtmlOutput(
+    '<!doctype html><html><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<style>body{font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+    + 'max-width:640px;margin:60px auto;padding:0 22px;color:#222}'
+    + 'h1{font-size:20px;margin:0 0 14px}p{margin:6px 0}'
+    + '.hint{color:#8a8a8a;font-size:13px;margin-top:28px}a{color:#1a73e8}</style>'
+    + '</head><body>' + body + '</body></html>'
+  ).setTitle(result.ok ? 'Saved' : 'Upload failed');
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 // Browsers send a GET when someone opens the /exec URL directly: say hello

@@ -254,7 +254,7 @@ anyone on the team**.
    (`FOLDER_ID` already points at your folder — leave it)
 3. Change `TOKEN` to any random string, and make sure the page uses the same one
 4. **Deploy → New deployment → Web app**:
-   - Execute as: **Me**
+   - Execute as: **User accessing the web app** ← this is what makes the file theirs
    - Who has access: **Anyone**
    - Approve the consent screen (it is your own script)
 5. Copy the `/exec` URL into `DRIVE_UPLOAD_URL` at the top of `index.html`
@@ -277,6 +277,27 @@ reputation — a real, documented abuse pattern. So the script also checks:
 
 Rejections are reported on the page (e.g. `unexpected file name: …`) rather than
 failing silently.
+
+### Why the upload opens a tab instead of finishing in place
+
+"Execute as: User accessing the web app" means the request has to carry the
+visitor's Google session, and the page is on a **different origin** from
+`script.google.com` — a cross-origin `fetch` cannot carry that session (it gets
+redirected to a login page, which the browser reports as a network error).
+
+The page therefore submits a **form with `target="_blank"`**: a top-level
+navigation is first-party, so the session comes along and the script runs as that
+person. The result page (file name, folder, open link) appears in the new tab,
+and the original page tells you it is safe to close it.
+
+### Everyone's first time
+
+- Google asks for authorisation (possibly "Google hasn't verified this app" →
+  Advanced → Continue) — **once only**
+- Afterwards each Save to Drive opens a tab and uploads straight away
+- The folder must stay **"Anyone with the link → Editor"**, because the script
+  writes with that person's permission. The cost of this mode: anyone holding the
+  link can delete files.
 
 ### What this endpoint can and cannot do
 
