@@ -13,9 +13,10 @@
 
 - 已创建专用项目：`Cart to Order Form`。
 - Project ID：`cart-to-order-form`；Project number：`115821368206`（从 Console 当前项目页面读取）。
-- Google Drive API 已启用。Google Picker API 的启用页和 OAuth 应用创建最后一步均涉及 Google 条款／用户数据政策，正在等待账号本人的明确确认。
-- OAuth 应用名称、支持邮箱、External 受众和开发者联系邮箱已填好；尚未点击最后的同意／创建，因此不能视为应用或凭证已经创建。
-- Web OAuth client、受限制的 Picker API key、正式发布和真实无警告验收仍待完成。
+- 用户已明确授权接受 Google API 服务条款和用户数据政策，并创建 Web OAuth client / 受限制的 Picker API key。
+- Google Drive API、Google Picker API 均已启用。OAuth 数据访问仅保存 `drive.file`，敏感和受限范围为空。
+- Web 客户端和受限制的浏览器 key 均已创建，值已读取用于配置；客户端 secret 不用于此实现，未保存。
+- 正在先发布隐私页面，再补齐 Google 品牌信息和正式发布；真实授权界面、文件夹选择、上传、归属、无警告验收仍待完成。
 
 ## 1. 在同一个 Google Cloud 项目中准备
 
