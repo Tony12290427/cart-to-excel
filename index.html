@@ -6,6 +6,8 @@
 <title>Cart to Order Form</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="drive-config.js"></script>
+<script src="drive-upload.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -64,6 +66,7 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
 <body>
 <div class="container">
   <h1>HKUST Robotics Team - Order Form Generator</h1>
+  <p style="font-size:12px;color:#777;margin:-10px 0 18px;">Create the team's order form from your cart. <a href="privacy.html">Privacy / 隐私说明</a></p>
   <details id="how-to" style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:12px 20px; margin-bottom:20px;">
     <summary style="cursor:pointer; font-size:14px; font-weight:600; color:#1a1a1a; padding:4px 0;">📖 How to use — 2-minute walkthrough</summary>
     <ol style="margin:14px 0 0 20px; font-size:13px; line-height:1.9; color:#444;">
@@ -831,10 +834,12 @@ function traceSignatureImage(img) {
 // Stamp the signature into the workbook. The template already ships a drawing
 // for sheet1 (oneCellAnchor placeholders over 1x1 transparent PNGs), so the
 // signature just becomes image3.png plus one extra relationship and anchor.
-function embedSignature(zip) {
-  if (!signatureDataUrl) return Promise.resolve();
+function embedSignature(zip, signature) {
+  var dataUrl = signature ? signature.dataUrl : signatureDataUrl;
+  var aspect = signature ? signature.aspect : signatureAspect;
+  if (!dataUrl) return Promise.resolve();
 
-  var binary = atob(signatureDataUrl.split(',')[1]);
+  var binary = atob(dataUrl.split(',')[1]);
   var png = new Uint8Array(binary.length);
   for (var i = 0; i < binary.length; i++) png[i] = binary.charCodeAt(i);
   zip.file('xl/media/image3.png', png);
@@ -856,11 +861,11 @@ function embedSignature(zip) {
     // (twoCellAnchor + fillRect) squashed it, so size it instead of fitting it.
     var EMU_PER_INCH = 914400;
     var targetHeight = 0.55;                 // inches, a bit over three 15.75pt rows
-    var targetWidth = targetHeight * signatureAspect;
+    var targetWidth = targetHeight * aspect;
     var MAX_WIDTH = 3.4;                     // keep a long name from sprawling
     if (targetWidth > MAX_WIDTH) {
       targetWidth = MAX_WIDTH;
-      targetHeight = MAX_WIDTH / signatureAspect;
+      targetHeight = MAX_WIDTH / aspect;
     }
     var ext = '<xdr:ext cx="' + Math.round(targetWidth * EMU_PER_INCH)
       + '" cy="' + Math.round(targetHeight * EMU_PER_INCH) + '"/>';
@@ -968,8 +973,18 @@ function requiredFieldsSatisfied() {
 }
 
 // Builds the workbook and resolves with a Blob; shared by download and upload
-function buildWorkbookBlob() {
+function workbookSnapshot() {
+  return {
+    items: items.map(function(item) { return Object.assign({}, item); }),
+    competition: document.getElementById('input-competition').value.trim(),
+    student: document.getElementById('input-student').value.trim(),
+    signature: { dataUrl: signatureDataUrl, aspect: signatureAspect }
+  };
+}
+
+function buildWorkbookBlob(snapshot) {
   try {
+    snapshot = snapshot || workbookSnapshot();
     var today = new Date();
     var dateStr = (today.getMonth()+1) + '/' + today.getDate() + '/' + today.getFullYear();
 
@@ -987,7 +1002,7 @@ function buildWorkbookBlob() {
         var newRows = '';
         for (var r = 11; r <= 40; r++) {
           var idx = r - 11;
-          var item = idx < items.length ? items[idx] : null;
+          var item = idx < snapshot.items.length ? snapshot.items[idx] : null;
 
           newRows += '<row r="' + r + '" ht="20.25" customHeight="1">';
 
@@ -1033,8 +1048,8 @@ function buildWorkbookBlob() {
         }
 
         // Get Competition and Student Name from inputs
-        var competitionName = document.getElementById('input-competition').value.trim();
-        var studentName = document.getElementById('input-student').value.trim();
+        var competitionName = snapshot.competition;
+        var studentName = snapshot.student;
 
         // C3 is the value cell under the "Competition:" label in A3
         // (the template's label/value pattern is A-column label → C-column value,
@@ -1055,7 +1070,7 @@ function buildWorkbookBlob() {
         zip.file('xl/worksheets/sheet1.xml', sheetXML);
 
         // Stamp the signature image, if one was drawn or uploaded
-        return embedSignature(zip).then(function() {
+        return embedSignature(zip, snapshot.signature).then(function() {
           // Generate new xlsx
           return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         });
@@ -1090,6 +1105,24 @@ function exportExcel() {
 var driveStatusText = '';
 var driveStatusColor = '#2e7d32';
 var driveLinkUrl = '';
+var driveBusy = false;
+var directDriveReady = false;
+var directDriveConfig = window.ORDER_FORM_DRIVE_CONFIG || {};
+var directDriveRequested = !!(directDriveConfig.clientId || directDriveConfig.apiKey || directDriveConfig.projectNumber);
+var directDrive = window.OrderFormDrive && window.OrderFormDrive.isConfigured(directDriveConfig)
+  ? window.OrderFormDrive.createClient(directDriveConfig) : null;
+
+if (directDrive) {
+  directDrive.ready().then(function() {
+    directDriveReady = true;
+    if (items.length) updateSummary();
+  }).catch(function(err) {
+    setDriveStatus(err.message, '#c62828', '');
+  });
+} else if (directDriveRequested) {
+  driveStatusText = 'Google upload setup is incomplete. Contact the maintainer or use Export Excel.';
+  driveStatusColor = '#c62828';
+}
 
 function blobToBase64(blob) {
   return new Promise(function(resolve, reject) {
@@ -1113,6 +1146,8 @@ function setDriveStatus(text, color, url) {
 // so the upload opens in its own tab; that tab shows the outcome, and the first one
 // per person is where Google asks them to authorise the script.
 function uploadToDrive() {
+  if (directDrive) { uploadWithGoogleAccount(); return; }
+  if (directDriveRequested) return;
   if (items.length === 0) { alert('No items to export'); return; }
   if (!requiredFieldsSatisfied()) return;
 
@@ -1149,6 +1184,33 @@ function uploadToDrive() {
     console.error('Drive upload failed:', err);
     setDriveStatus('⚠ Could not prepare the upload: ' + (err && err.message ? err.message : err),
       '#c62828', '');
+  });
+}
+
+function uploadWithGoogleAccount() {
+  if (driveBusy || !directDriveReady || items.length === 0 || !requiredFieldsSatisfied()) return;
+  // Google must open from this click, before workbook generation yields.
+  var authorization = directDrive.authorize();
+  var filename = workbookFilename();
+  var snapshot = workbookSnapshot();
+  driveBusy = true;
+  setDriveStatus('Sign in with the Google account submitting this form…', '#666', '');
+  authorization.then(function() {
+    setDriveStatus('Preparing your order form…', '#666', '');
+    return buildWorkbookBlob(snapshot);
+  }).then(function(blob) {
+    return directDrive.upload(blob, filename, function(message) {
+      setDriveStatus(message, '#666');
+    });
+  }).then(function(result) {
+    var owner = result.owner ? ' · Owner: ' + result.owner : '';
+    setDriveStatus('✓ Saved: ' + result.name + ' in ' + result.folder + owner
+      + (result.ownedByMe ? ' (your Google account)' : ' · Check file ownership in Drive.'), '#2e7d32', result.url);
+  }).catch(function(err) {
+    setDriveStatus('⚠ ' + err.message, '#c62828', '');
+  }).finally(function() {
+    driveBusy = false;
+    if (items.length) updateSummary();
   });
 }
 
@@ -1265,23 +1327,30 @@ function updateSummary() {
     : '';
   var missing = missingRequiredFields();
   var blocked = missing.length > 0;
+  var driveEnabled = !!(directDriveRequested || DRIVE_UPLOAD_URL);
+  var driveBlocked = blocked || driveBusy || (directDriveRequested && !directDriveReady);
   document.getElementById('summary-bar').innerHTML =
     '<span>Total: ¥' + total.toFixed(2) + ' | ' + items.length + ' items' + over + '</span>' +
     '<span style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">' +
       (blocked
         ? '<span style="color:#c62828; font-size:13px;">⚠ Fill in to export: ' + missing.join(', ') + '</span>'
         : '') +
-      (DRIVE_UPLOAD_URL
-        ? '<button id="btn-drive"' + (blocked ? ' disabled' : '') +
-            ' style="padding:10px 18px; background:' + (blocked ? '#bdbdbd' : '#fff') + '; color:' +
-            (blocked ? '#fff' : '#4a90d9') + '; border:1px solid ' +
-            (blocked ? '#bdbdbd' : '#4a90d9') + '; border-radius:4px; font-size:14px; cursor:' +
-            (blocked ? 'not-allowed' : 'pointer') + ';">Save to Drive</button>'
+      (driveEnabled
+        ? '<button id="btn-drive"' + (driveBlocked ? ' disabled' : '') +
+            ' style="padding:10px 18px; background:' + (driveBlocked ? '#bdbdbd' : '#fff') + '; color:' +
+            (driveBlocked ? '#fff' : '#4a90d9') + '; border:1px solid ' +
+            (driveBlocked ? '#bdbdbd' : '#4a90d9') + '; border-radius:4px; font-size:14px; cursor:' +
+            (driveBlocked ? 'not-allowed' : 'pointer') + ';">'
+            + (driveBusy ? 'Saving…' : (directDrive && !directDriveReady && !driveStatusText ? 'Loading Google…' : 'Save to Drive')) + '</button>'
+        : '') +
+      (directDrive
+        ? '<button id="btn-drive-account"' + (driveBusy || !directDriveReady ? ' disabled' : '')
+          + ' style="background:transparent;border:0;color:#4a90d9;cursor:pointer;font-size:12px;">Switch Google account</button>'
         : '') +
       '<button id="btn-export"' + (blocked ? ' disabled' : '') +
         ' style="padding:10px 24px; background:' + (blocked ? '#bdbdbd' : '#2e7d32') + '; color:#fff; border:none;' +
         ' border-radius:4px; font-size:15px; cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';">Export Excel</button>' +
-      (DRIVE_UPLOAD_URL
+      (driveEnabled
         ? '<div style="flex-basis:100%; text-align:right; min-height:16px;">' +
             '<span id="drive-status" style="font-size:12px; color:' + driveStatusColor + ';">' + escAttr(driveStatusText) + '</span>' +
             (driveLinkUrl
@@ -1289,10 +1358,23 @@ function updateSummary() {
               : '') +
           '</div>'
         : '') +
+      (directDrive
+        ? '<div style="flex-basis:100%;text-align:right;font-size:12px;color:#666;">'
+          + 'Your Google account uploads the form. First time: choose the team '
+          + '<a href="https://drive.google.com/drive/folders/' + encodeURIComponent(directDriveConfig.folderId)
+          + '" target="_blank" rel="noopener">Order Form folder</a> when asked.'
+          + ' <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></div>'
+        : '') +
     '</span>';
   document.getElementById('btn-export').addEventListener('click', exportExcel);
-  if (DRIVE_UPLOAD_URL) {
+  if (driveEnabled) {
     document.getElementById('btn-drive').addEventListener('click', uploadToDrive);
+  }
+  if (directDrive) {
+    document.getElementById('btn-drive-account').addEventListener('click', function() {
+      directDrive.clearAccount();
+      setDriveStatus('Click Save to Drive to choose another Google account.', '#666', '');
+    });
   }
   markMissingFields(missing);
 }

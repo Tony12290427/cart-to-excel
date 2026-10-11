@@ -239,93 +239,25 @@ after recording a new one.
 > Note: once `media/how-to.mp4` is committed it stays in git history forever.
 > Switching to an external URL only makes *future* clones smaller.
 
-## Saving straight to Google Drive (optional, one-time setup)
+## Saving straight to Google Drive
 
-Besides downloading the file you can file it **directly into a Drive folder**. A
-static page cannot write to Drive on its own, so it needs a small service that
-signs on your behalf — a Google Apps Script is the least painful option: **no
-Google Cloud project, no OAuth client, no verification, and no consent popup for
-anyone on the team**.
+**Save to Drive** uses the submitter's Google account to save the completed workbook to the team's **Order Form** folder.
 
-### One-time setup (about 5 minutes, must be done from your own Google account)
+The new uploader uses Google Identity Services, Google Picker and the Drive API with only the non-sensitive **`drive.file` scope**. Choose your Google account and, when prompted, the team's Order Form folder. The original page shows the saved filename, folder, owner and file link. Uploads only create files; repeated submissions coexist without replacing or deleting earlier forms.
 
-1. Open https://script.google.com → **New project**
-2. Paste all of `tools/drive-upload.gs` over `Code.gs`
-   (`FOLDER_ID` already points at your folder — leave it)
-3. Change `TOKEN` to any random string, and make sure the page uses the same one
-4. **Deploy → New deployment → Web app**:
-   - Execute as: **User accessing the web app** ← this is what makes the file theirs
-   - Who has access: **Anyone**
-   - Approve the consent screen (it is your own script)
-5. Copy the `/exec` URL into `DRIVE_UPLOAD_URL` at the top of `index.html`
+Follow **[GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)** to configure a Web OAuth Client ID, restricted Picker API key and project number from the same Google Cloud project in `drive-config.js`. Public deployment also needs Google's required branding and domain configuration. A code change alone does not prove that the warning is gone.
 
-Once configured, a **Save to Drive** button appears next to Export Excel; it
-reports the saved file name and offers an "open file" link.
+**Migration status (11 October 2026):** the user successfully uploaded through the existing Apps Script. The new configuration values are still blank, so the page continues using the existing new-tab form submission. That method requests broader Drive access and may show an unverified-app warning. The new flow starts only after complete configuration and still needs a real-account test.
 
-### Hardening: why the name and the bytes are checked too
+- The submitting account needs editor access to the target folder. Google Picker does not grant missing sharing permissions.
+- Files in a shared My Drive folder are created by the submitting account. Files in a Shared drive belong to the organization, so the new uploader rejects that destination.
+- Direct-upload tokens remain in page memory; refresh or expiration can require account selection again. Use **Switch Google account** to choose another account.
+- Drive permits identical filenames. The new uploader does not list teammates' files to assign a `(2)` suffix.
+- After an uncertain network response, check the folder before retrying.
+- Leaving all three new configuration values blank keeps the existing Apps Script active. Partial configuration disables upload and reports incomplete setup.
+- See the [privacy notice](privacy.html) for form, signature, Google access and sharing information.
 
-The page lives in a public repository, so **the URL and the TOKEN are both
-readable by anyone**. A token alone would still let whoever finds the URL use the
-endpoint as free file hosting and launder it through `drive.google.com`'s
-reputation — a real, documented abuse pattern. So the script also checks:
-
-| Check | What it stops |
-|---|---|
-| Name must match `^\\d{8}( .+)? order form\\.xlsx$` | arbitrary files such as `payload.exe` or `shell.php` |
-| Body must be a ZIP containing `xl/workbook.xml` | anything merely pretending to be an xlsx; a real xlsx cannot carry VBA macros (that would be .xlsm), so whatever passes is a plain spreadsheet |
-| At most 50 uploads per day | bulk use of the endpoint |
-
-Rejections are reported on the page (e.g. `unexpected file name: …`) rather than
-failing silently.
-
-### Why the upload opens a tab instead of finishing in place
-
-"Execute as: User accessing the web app" means the request has to carry the
-visitor's Google session, and the page is on a **different origin** from
-`script.google.com` — a cross-origin `fetch` cannot carry that session (it gets
-redirected to a login page, which the browser reports as a network error).
-
-The page therefore submits a **form with `target="_blank"`**: a top-level
-navigation is first-party, so the session comes along and the script runs as that
-person. The result page (file name, folder, open link) appears in the new tab,
-and the original page tells you it is safe to close it.
-
-### Everyone's first time
-
-- Google asks for authorisation (possibly "Google hasn't verified this app" →
-  Advanced → Continue) — **once only**
-- Afterwards each Save to Drive opens a tab and uploads straight away
-- The folder must stay **"Anyone with the link → Editor"**, because the script
-  writes with that person's permission. The cost of this mode: anyone holding the
-  link can delete files.
-
-### What this endpoint can and cannot do
-
-| It can | It cannot |
-|---|---|
-| **create** a file in the folder | ❌ list what is in the folder (there is no listing code at all) |
-| add a suffix on a name clash (`… (2).xlsx`) | ❌ delete arbitrary files — trashing is limited to a same-name upload and is off by default |
-| return the name and link of the file it just wrote | ❌ read any existing file, or touch the folder itself |
-
-**On deletion**: the only destructive capability in the script is same-name
-replacement, and it is **off** by default (`REPLACE_SAME_NAME = false`). Left on,
-anyone holding the public URL could push a teammate's submission to the trash by
-guessing its name — the one way this endpoint could lose data. Off, the endpoint
-is purely additive: the worst case is extra files, never a missing one. (Flip the
-flag if you want the old behaviour, knowing that cost.)
-
-### Worth knowing
-
-- **Uploads are owned by whoever deployed the script** (you) and count against
-  that account's storage. Share the folder with the team; keep the URL inside it.
-- **A repeated export coexists** rather than replacing: you get `… order form.xlsx`
-  and `… order form (2).xlsx`. Delete one by hand when you reconcile them.
-- **`TOKEN` only deters scanners**, it is not real security — the page is public,
-  so its source reveals it. Rotate it by editing both sides.
-- With `DRIVE_UPLOAD_URL` empty the button is **not rendered at all**, so the
-  feature simply does not exist until it is configured.
-- Debugging: run `testWrite()` once in the script editor. If it can write a file,
-  the folder id and permissions are right.
+The legacy handler remains in `tools/drive-upload.gs`. It must run as the user accessing the web app. Its token is public; restrictions in its code do not narrow the OAuth permission granted by Google. Its filename, ZIP-header/workbook-path and daily-count checks are limited validation, do not prove arbitrary content harmless, and do not apply to the direct Drive API flow.
 
 ## Changing the template
 

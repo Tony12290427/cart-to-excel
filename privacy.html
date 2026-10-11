@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy — Cart to Order Form</title>
+  <style>body{font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#333;background:#f5f5f5;margin:0;padding:28px}main{max-width:760px;margin:auto;background:white;padding:28px;border-radius:8px}h1{font-size:25px}h2{font-size:19px;margin-top:28px}a{color:#1a73e8}p{margin:12px 0}</style>
+</head>
+<body><main>
+  <a href="index.html">← Cart to Order Form</a>
+  <h1>Privacy / 隐私说明</h1>
+  <p>Updated / 更新日期：11 October 2026</p>
+  <p>Cart to Order Form helps HKUST Robotics Team members turn shopping-cart information into an order-form Excel file. Maintainer: Tony, <a href="mailto:tony20051229@gmail.com">tony20051229@gmail.com</a>.</p>
+  <p>本工具帮助 HKUST Robotics Team 队员把购物车内容整理成订购表 Excel。维护者：Tony，联系邮箱见上方。</p>
+
+  <h2>Your form / 你的表格</h2>
+  <p>Cart text, product links, prices, quantities, competition name, student name and signature are processed in your browser. Export Excel saves the file locally. Save to Drive sends the completed workbook, including the signature, to Google Drive in the team's Order Form folder. People who have access to that folder can access the uploaded form according to its sharing settings.</p>
+  <p>购物车文字、商品链接、价格、数量、比赛名称、学生姓名和签名在浏览器中处理。本地导出会下载文件；选择上传时，完整表格（包括签名）会发送到 Google Drive 的团队 Order Form 文件夹，有相应共享权限的人可以访问。</p>
+
+  <h2>Google access / Google 授权</h2>
+  <p>The direct Drive API upload requests <code>drive.file</code>: access to files created by this app or explicitly selected for this app, including the target folder. It reads the target folder's name and write capability, creates a workbook there, and reads the new file's link and owner display name to show the result. The app does not request access to all of your Drive files in this mode.</p>
+  <p>新版直接上传使用 <code>drive.file</code> 权限，只涉及工具创建或你明确选择给工具使用的文件及目标文件夹。工具读取目标文件夹的名称和写入权限，创建表格，并读取新文件的链接和所有者显示名称来展示结果。</p>
+  <p>During the transition, if direct upload has not been configured, Save to Drive uses the existing Google Apps Script deployment. That deployment requests broader Drive access and processes the workbook on Google's Apps Script servers before creating the file in the same team folder. Google shows the permissions for the active upload method before you grant access.</p>
+  <p>迁移期间，新版未启用时仍使用原有 Apps Script 上传。该方式申请较广的 Drive 权限，在 Google 的 Apps Script 服务中处理表格后存入同一团队文件夹。授权前请查看 Google 显示的实际权限。</p>
+
+  <h2>Storage and removal / 保存与删除</h2>
+  <p>The app has no separate database of your forms or Google tokens. Direct-upload access tokens stay in page memory and are cleared on reload or when switching accounts; they are not saved in browser storage. Uploaded files remain in the team folder until removed by someone with the required permissions. You can revoke the app's Google access in <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener">Google Account connections</a>. Revoking access does not delete files already uploaded; use Drive or contact the maintainer to request removal.</p>
+  <p>工具没有单独保存表格或 Google 令牌的数据库。新版访问令牌仅存在当前页面内存中，刷新页面或切换账号时清除，不写入浏览器持久存储。已上传文件由 Drive 的共享权限和删除操作管理。撤销授权不会自动删除已上传文件，如需删除请在 Drive 操作或联系维护者。</p>
+
+  <h2>Service providers / 服务提供方</h2>
+  <p>The website is hosted on Vercel and GitHub Pages. Its spreadsheet libraries, Google sign-in and folder picker load from their providers. These services may receive ordinary request information such as your IP address and browser details under their own privacy policies. The tool does not use Google user data for advertising, sell it, or share it with AI models. Its use of information received from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including Limited Use requirements.</p>
+  <p>网站由 Vercel 和 GitHub Pages 托管，表格库和 Google 登录、文件选择器从各服务方加载。服务方可能根据其隐私政策处理 IP 地址、浏览器信息等请求数据。工具不将 Google 用户数据用于广告、出售或发送给 AI 模型，并遵守 Google API Services User Data Policy 的 Limited Use 要求。</p>
+</main></body>
+</html>
