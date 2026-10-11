@@ -208,7 +208,7 @@ swift tools/shrink_video.swift 原始录屏.mov media/how-to.mp4 1280 15 400
 
 **配置步骤见 [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)**：需同一个 Google Cloud 项目的 Web OAuth Client ID、受限制的 Picker API key 和项目编号，填入 `drive-config.js`。公开发布时还需完成 Google 要求的品牌／域名配置；不能仅凭代码修改承诺不出现警告。
 
-**迁移状态（2026-10-11）**：用户已成功使用旧 Apps Script 上传。新版三个配置值暂为空，页面继续用旧的“新标签页提交”流程；旧流程会申请较广 Drive 权限，并可能显示“未经验证”警告。填好完整配置才会启用新版，尚未完成真实账号验收。
+**迁移状态（2026-10-11）**：专用 Google Cloud 项目已配置为正式版，新版公开配置值已接入开发分支。真实首次账号选择后直接显示普通 `drive.file` 授权页，未出现“未经验证／不安全”屏幕。Google Picker、真实测试表上传和当前账号个人归属均已通过，下载回读的 Excel 及签名正确；新版配置已启用。另一个队员账号的首次使用仍需现场核对。
 
 - 上传者必须具有目标文件夹编辑权限；现有“知道链接 → 编辑者”设置可继续使用，Google Picker 本身不授予共享权限。
 - 使用共享的 My Drive 文件夹时文件由上传账号创建；Shared drive 中的文件归组织，新版会拒绝这种目标。

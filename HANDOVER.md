@@ -9,7 +9,7 @@
 
 用户已提供旧 Apps Script 的成功页：`20261011 wheel leg element order form.xlsx`。Drive 元数据确认它位于目标 `Order Form` 文件夹；没有返回所有者，个人归属还需在 Drive 核对。接下来用户要求解决首次 Google “未经验证／不安全”警告。
 
-新增 `drive-upload.js`（GIS + Picker + Drive API，仅 `drive.file`）、`drive-config.js` 和 `privacy.html`；详细配置与验收步骤见 [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)。三个公开配置值尚为空，保留旧上传作为当前可用方式。新版已写入代码，但 Google Cloud 配置、生产发布、实际首次授权／目标选择／上传／归属／无警告验收仍未完成。
+新增 `drive-upload.js`（GIS + Picker + Drive API，仅 `drive.file`）、`drive-config.js` 和 `privacy.html`；详细配置与验收步骤见 [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)。专用 Google Cloud 项目 `cart-to-order-form`（编号 `115821368206`）已启用 Drive/Picker、仅保存 `drive.file` 范围并正式发布。真实本地首次流程已显示普通文件权限授权页，未出现旧“未经验证／不安全”屏幕。用户已明确允许账号授权及 TEST 上传；Google Picker 成功选中目标，真实上传返回当前账号为所有者。下载回读 63,239 字节的测试 xlsx，ZIP 完整、C3/H66/F11/H11 正确且含签名 PNG。本次接入提交启用正式站点配置；另一位队员账号首次使用尚未现场实测。Google 验证中心显示无需数据访问验证，未宣称通过品牌审核。
 
 `index.html` 现在通过两个本地脚本加载新版配置和上传客户端；不再是运行时完全自包含的单文件。上传前把商品、姓名、比赛和签名取快照，避免用户等待 Google 授权时编辑导致文件名与表内内容错位。
 
