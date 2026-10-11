@@ -6,7 +6,7 @@
 
 - 用户于 2026-10-11 提供了原有 Apps Script 成功页，文件 `20261011 wheel leg element order form.xlsx` 已保存。Drive 元数据也确认它位于目标文件夹；所有者未从插件返回，仍需人工核对。
 - 新版代码：`drive-upload.js`。公开配置：`drive-config.js`。隐私说明：`privacy.html`。
-- 三个 Google 配置值尚为空，因此网页继续使用已跑通的旧 Apps Script。填入完整配置后网页优先使用新版；部分配置会禁用上传并显示未完成提示，避免误以为新版已经启用。
+- 新版三个公开配置值已填入接入分支；专用 Google Cloud 项目已发布为正式版。真实首次授权、目标选择、测试表上传及个人归属均已通过；本次提交启用正式站点的新客户端。
 - 自动测试只能验证实现；Google Cloud 发布、真实授权界面、首次选文件夹、上传及文件归属需要实际账号验收。不能把代码完成称为警告已经消除。
 
 ## 2026-10-11 Google Cloud 配置进度
@@ -16,7 +16,11 @@
 - 用户已明确授权接受 Google API 服务条款和用户数据政策，并创建 Web OAuth client / 受限制的 Picker API key。
 - Google Drive API、Google Picker API 均已启用。OAuth 数据访问仅保存 `drive.file`，敏感和受限范围为空。
 - Web 客户端和受限制的浏览器 key 均已创建，值已读取用于配置；客户端 secret 不用于此实现，未保存。
-- 正在先发布隐私页面，再补齐 Google 品牌信息和正式发布；真实授权界面、文件夹选择、上传、归属、无警告验收仍待完成。
+- 隐私页面已上线并核验 HTTP 200；主页和隐私链接已保存，Google Console 已显示“正式版”。
+- 本地真实首次流程从账号选择直接进入普通 `drive.file` 授权页，未出现“未经验证／不安全”屏幕。用户明确授权后，Google Picker 成功选中目标文件夹，并真实创建测试表；Google 返回的所有者为当前提交账号。
+- 回读测试文件确认目标 parent ID、xlsx MIME 和 63,239 字节完整 ZIP；C3/H66/F11/H11 值及签名 PNG 均正确。
+- Google 验证中心明确显示：因未请求任何敏感或受限范围，无需数据访问验证。品牌显示的验证属于另一项，当前没有宣称通过 Google 品牌审核。
+- 已测试账号为维护者账号；尚未用另一个队员账号做首次流程验收。
 
 ## 1. 在同一个 Google Cloud 项目中准备
 
@@ -44,7 +48,7 @@
 
 不要添加 `drive`、`drive.readonly` 或 `drive.metadata.readonly`，否则又引入较广的受限权限。代码也设了 `include_granted_scopes: false`。
 
-公开给队员使用时，Audience 要发布到 **In production**；Testing 模式有测试用户限制与测试提示，不适合“不收集队员邮箱”的要求。若需显示正式应用名称/品牌，按 Console 完成 Verify Branding → Publish branding。`drive.file` 是非敏感权限，但并不免除品牌、域名等发布要求，也不能承诺随便填三个值就没有警告。
+公开给队员使用时，Audience 要发布到 **In production**；Testing 模式有测试用户限制与测试提示，不适合“不收集队员邮箱”的要求。如需额外验证品牌显示或上传徽标，按 Console 当前要求处理。此项目实际配置只有两个 authorized domains、没有徽标、仅 `drive.file`，已成功正式发布；验证中心显示无需数据访问验证。不能把这个结果说成“已通过 Google 品牌审核”，也不能把仅填写配置值当作实际无警告验收。
 
 Google 品牌验证要求证明 authorized domain 的所有权。以 Console 要求为准，在 Search Console 验证对应站点。若托管子域无法满足其域名核验要求，需要使用团队或维护者拥有的域名；不要假装拥有 `vercel.app` 或 `github.io`。本仓库尚未添加站点验证文件，须拿到 Google 给出的实际验证内容后添加。
 
@@ -58,6 +62,7 @@ Authorized JavaScript origins 是 **origin**，没有路径、没有末尾 `/`�
 https://cart-to-excel.vercel.app
 https://tony12290427.github.io
 http://localhost:8765
+http://127.0.0.1:49530
 ```
 
 如果改用自有域名，也把该 origin 加入。GitHub Pages 项目路径 `/cart-to-excel/` 不应写进 origin。使用 GIS token popup，无需 OAuth redirect URI，也无需客户端 secret。
@@ -74,6 +79,7 @@ APIs & Services → Credentials → Create credentials → API key。
 https://cart-to-excel.vercel.app/*
 https://tony12290427.github.io/*
 http://localhost:8765/*
+http://127.0.0.1:49530/*
 https://docs.google.com/*
 ```
 

@@ -247,7 +247,7 @@ The new uploader uses Google Identity Services, Google Picker and the Drive API 
 
 Follow **[GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)** to configure a Web OAuth Client ID, restricted Picker API key and project number from the same Google Cloud project in `drive-config.js`. Public deployment also needs Google's required branding and domain configuration. A code change alone does not prove that the warning is gone.
 
-**Migration status (11 October 2026):** the user successfully uploaded through the existing Apps Script. The new configuration values are still blank, so the page continues using the existing new-tab form submission. That method requests broader Drive access and may show an unverified-app warning. The new flow starts only after complete configuration and still needs a real-account test.
+**Migration status (11 October 2026):** the dedicated Google Cloud project is in production and its public configuration is connected on the development branch. A real first-time flow goes straight from account selection to ordinary drive.file consent, without an unverified/unsafe screen. Google Picker selection, a real test upload and personal ownership passed; the downloaded Excel file and signature were verified. This configuration enables the new uploader. A different teammate account still needs its own first-use check.
 
 - The submitting account needs editor access to the target folder. Google Picker does not grant missing sharing permissions.
 - Files in a shared My Drive folder are created by the submitting account. Files in a Shared drive belong to the organization, so the new uploader rejects that destination.
