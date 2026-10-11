@@ -13,23 +13,27 @@
  *     the page is public, so anyone reading its source can see it. Rotate it by
  *     editing both places.
  *  5. Deploy → New deployment → Web app
- *         Execute as:        Me
+ *         Execute as:        User accessing the web app   ← so the file is theirs
  *         Who has access:    Anyone
- *     Authorise it when asked (the consent screen is for your own script).
+ *     Each person approves the consent screen on their first upload.
  *  6. Copy the resulting /exec URL into index.html → DRIVE_UPLOAD_URL
+ *
+ *  The folder must stay shared as "Anyone with the link → Editor", because the
+ *  script now writes with the submitting person's permission. That requirement is
+ *  also why the page opens the upload in a new tab instead of using fetch: a
+ *  cross-origin fetch cannot carry the visitor's Google session.
  *
  * Sanity check: run testWrite() once from the editor. It should drop a small
  * text file into the folder and log its URL. If that fails, the folder id or
  * the permission is wrong and uploads will fail too.
  *
  * Notes
- *  - Files are created by whoever deploys the script, so they count against that
- *    account's storage. Share the folder with the team; do not share this URL
- *    outside it.
- *  - Re-uploading the same file name trashes the older copy, so a student who
- *    exports twice does not leave two submissions behind.
- *  - The page posts as a "simple request" (form-encoded) which keeps it clear of
- *    CORS preflight, and Apps Script answers on a domain that allows the origin.
+ *  - Files are created by the person who submits them: their name on the file and
+ *    their storage quota, which is the whole point of running as the visitor.
+ *  - A repeated export is kept rather than replacing anything — it lands as
+ *    "... (2).xlsx". Nothing here can delete a file (see REPLACE_SAME_NAME).
+ *  - Callers that ask without a nonce (curl, tests) still get JSON; the browser
+ *    form asks with one and gets a small page instead.
  */
 
 var FOLDER_ID = '1EC0L0S0kHn8UAIEY-nukXsTujPfX2ImG';   // ← your folder
