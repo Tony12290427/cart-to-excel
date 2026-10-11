@@ -9,6 +9,14 @@
 - 三个 Google 配置值尚为空，因此网页继续使用已跑通的旧 Apps Script。填入完整配置后网页优先使用新版；部分配置会禁用上传并显示未完成提示，避免误以为新版已经启用。
 - 自动测试只能验证实现；Google Cloud 发布、真实授权界面、首次选文件夹、上传及文件归属需要实际账号验收。不能把代码完成称为警告已经消除。
 
+## 2026-10-11 Google Cloud 配置进度
+
+- 已创建专用项目：`Cart to Order Form`。
+- Project ID：`cart-to-order-form`；Project number：`115821368206`（从 Console 当前项目页面读取）。
+- Google Drive API 已启用。Google Picker API 的启用页和 OAuth 应用创建最后一步均涉及 Google 条款／用户数据政策，正在等待账号本人的明确确认。
+- OAuth 应用名称、支持邮箱、External 受众和开发者联系邮箱已填好；尚未点击最后的同意／创建，因此不能视为应用或凭证已经创建。
+- Web OAuth client、受限制的 Picker API key、正式发布和真实无警告验收仍待完成。
+
 ## 1. 在同一个 Google Cloud 项目中准备
 
 打开 [Google Cloud Console](https://console.cloud.google.com/apis/credentials)。可创建一个独立的 `cart-to-excel` 项目，便于与旧 Apps Script 的广泛权限隔离。
