@@ -21,6 +21,9 @@
 - 回读测试文件确认目标 parent ID、xlsx MIME 和 63,239 字节完整 ZIP；C3/H66/F11/H11 值及签名 PNG 均正确。
 - Google 验证中心明确显示：因未请求任何敏感或受限范围，无需数据访问验证。品牌显示的验证属于另一项，当前没有宣称通过 Google 品牌审核。
 - 已测试账号为维护者账号；尚未用另一个队员账号做首次流程验收。
+- 生产 Picker key 和 Web OAuth 客户端已移除 `http://localhost:8765`、`http://127.0.0.1:49530` 两个测试来源，保存后重新打开 Console 核对。OAuth 只保留 Vercel / GitHub Pages；key 额外保留 Picker 所需的 `https://docs.google.com/*`，API 仍只允许 Drive / Picker。
+- 收紧后从 `https://cart-to-excel.vercel.app` 重新选择当前 Google 账号，真实保存 `20261011 TEST production restrictions order form.xlsx` 到固定 `Order Form` 文件夹，Google 返回所有者为当前账号。文件 ID：`1N_FWv--8ffxLWWXwNlxWlN1E_Sxbshwn`；下载回读 63,252 字节，ZIP、C3/H66、数量/金额和测试 X 签名 PNG 正确。此账号此前已授予文件夹权限，所以本轮没有再次弹 Picker；不是另一位队员的首次使用验收。
+- 用同一生产 key 只读请求本轮公开 TEST 文件元数据：正式站点 Referer 返回 200；两个本地 Referer 均返回 403 / `API_KEY_HTTP_REFERRER_BLOCKED`，确认 key 的新网站限制已生效。OAuth 本地来源的移除通过 Console 保存和回读核对；Google 提示配置传播可能延迟。
 
 ## 1. 在同一个 Google Cloud 项目中准备
 
@@ -61,8 +64,6 @@ Authorized JavaScript origins 是 **origin**，没有路径、没有末尾 `/`�
 ```text
 https://cart-to-excel.vercel.app
 https://tony12290427.github.io
-http://localhost:8765
-http://127.0.0.1:49530
 ```
 
 如果改用自有域名，也把该 origin 加入。GitHub Pages 项目路径 `/cart-to-excel/` 不应写进 origin。使用 GIS token popup，无需 OAuth redirect URI，也无需客户端 secret。
@@ -78,8 +79,6 @@ APIs & Services → Credentials → Create credentials → API key。
 ```text
 https://cart-to-excel.vercel.app/*
 https://tony12290427.github.io/*
-http://localhost:8765/*
-http://127.0.0.1:49530/*
 https://docs.google.com/*
 ```
 
@@ -127,7 +126,9 @@ NODE_PATH=/tmp/cart-to-excel-check/node_modules node tools/order-form-smoke.cjs
 python3 -m http.server 8765
 ```
 
-浏览器打开 `http://localhost:8765`（需先在 Google OAuth origin 配好此地址）。检查：首次界面、正确文件夹、真实 `.xlsx` 内容、签名、所有者、正常取消及重名并存。至少再用一个未授权过的队员账号测试，确认正常授权流程没有“未经验证／不安全”警告。
+浏览器打开 `http://localhost:8765` 可检查解析、签名和本地 Excel 导出。生产 OAuth 客户端和 Picker key 不允许本地来源；本地真实 Google 上传应使用独立的开发客户端和受限制的开发 key，不要把本地地址重新加入生产配置，也不要把开发配置提交到正式站点。
+
+真实上传验收从正式站点进行。检查：首次界面、正确文件夹、真实 `.xlsx` 内容、签名、所有者、正常取消及重名并存。至少再用一个未授权过的队员账号测试，确认正常授权流程没有“未经验证／不安全”警告。
 
 清空 `clientId`、`apiKey` 和 `projectNumber` 三项即可回到现有 Apps Script；旧端点留在 `index.html`。它仍会显示原有授权警告。新版实测通过之前不要删除旧部署。
 
