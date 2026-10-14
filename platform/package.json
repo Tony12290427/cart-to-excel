@@ -1,0 +1,17 @@
+{
+  "name": "order-form-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.22.2" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "demo": "node --env-file-if-exists=.env server.js --demo",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.2",
+    "google-auth-library": "11.3.0",
+    "jszip": "3.10.2"
+  }
+}

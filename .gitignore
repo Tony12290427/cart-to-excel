@@ -8,3 +8,13 @@
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Order platform runtime data and server credentials
+platform/node_modules/
+platform/data/
+platform/.env
+platform/.env.*
+!platform/.env.example
+platform/credentials/
+platform/*.sqlite*
+platform/coverage/

@@ -5,11 +5,31 @@
 
 ---
 
-## 2026-10-11 接续更新：上传已成功，新版权限迁移待配置
+## 2026-10-14 接续更新 订单管理第一版
+
+新增独立 `platform/`：Node 22.22.2 + SQLite 后端、Google 登录和成员角色、Drive 只读定时同步、标准 XLSX / Google 表格导入、下单数量、到校批次、学生按 item 和数量验收、异常及可追溯更正。真实部署配置、启动和验收步骤见 [platform/README.md](platform/README.md)。原导出/上传网页保持现有机制。
+
+已确认业务：管理方确认送到学校；所有获准团队学生都可领取并验收，记录实际操作人。通常整份表一起下单集运，支持分批及部分 item 未到。历史表先待核实，预算表可排除；未知真实进度不自动推定为已下单。
+
+本机虚构订单已跑通部分下单、两批到校、两名学生先后验收至“已到齐”；数据库重开、权限/CSRF、并发重放、过量验收、原表变更/丢失均有自动化测试。真实 Excel 与 Google 表格导出分别解析到 8/7 项。服务账号后台实际同步和真实 Google 登录验收须以配置后的结果为准，不能把演示身份当作真实接入。
+
+用户随后明确授权本机真实接入，已创建 `order-form-reader@cart-to-order-form.iam.gserviceaccount.com`（没有赋予项目管理角色），直接将固定文件夹共享为查看者；本机私钥在仓库外私有目录，路径仅在被忽略的 `.env`。独立 `Order Platform Local` 登录客户端只允许 `http://127.0.0.1:8787`；Google 登录和服务端 token 验证实测通过，维护者为首位管理员。真实后台首轮扫描 186 个文件，登记 182 个表格候选，167 个标准商品清单解析成功，15 个保留格式/数量错误或非标准提示。用户明确选择不新增 TEST 文件，实际订单全部保持待核实，未写入虚构下单或验收状态。
+
+SQLite 需持久化磁盘及备份，后台是常驻单实例 Node 进程。不能直接将其数据库放在 Vercel / Cloud Run 临时文件系统中。`platform/data/`、私钥和 `.env` 不进 Git；管理平台本地登录使用独立客户端，不将本地来源重新加入已有生产上传客户端。
+
+---
+
+## 2026-10-11 接续更新：新版上传已启用，生产来源已收紧
 
 用户已提供旧 Apps Script 的成功页：`20261011 wheel leg element order form.xlsx`。Drive 元数据确认它位于目标 `Order Form` 文件夹；没有返回所有者，个人归属还需在 Drive 核对。接下来用户要求解决首次 Google “未经验证／不安全”警告。
 
 新增 `drive-upload.js`（GIS + Picker + Drive API，仅 `drive.file`）、`drive-config.js` 和 `privacy.html`；详细配置与验收步骤见 [GOOGLE_DRIVE_SETUP.md](GOOGLE_DRIVE_SETUP.md)。专用 Google Cloud 项目 `cart-to-order-form`（编号 `115821368206`）已启用 Drive/Picker、仅保存 `drive.file` 范围并正式发布。真实本地首次流程已显示普通文件权限授权页，未出现旧“未经验证／不安全”屏幕。用户已明确允许账号授权及 TEST 上传；Google Picker 成功选中目标，真实上传返回当前账号为所有者。下载回读 63,239 字节的测试 xlsx，ZIP 完整、C3/H66/F11/H11 正确且含签名 PNG。本次接入提交启用正式站点配置；另一位队员账号首次使用尚未现场实测。Google 验证中心显示无需数据访问验证，未宣称通过品牌审核。
+
+生产 Picker key 和 OAuth 客户端已按用户要求移除 `http://localhost:8765`、`http://127.0.0.1:49530`。保存后重新打开 Console 核对：OAuth 仅有 Vercel 和 GitHub Pages，key 再保留 Picker 所需的 `https://docs.google.com/*`，API 限制仍是 Drive / Picker。本地真实上传须使用独立开发配置，不能把测试来源加回生产配置。
+
+收紧后已在 Vercel 正式网页重新选账号并真实上传 `20261011 TEST production restrictions order form.xlsx`，文件 ID `1N_FWv--8ffxLWWXwNlxWlN1E_Sxbshwn`；固定目标文件夹、Google 返回当前账号所有权均正确。下载回读 63,252 字节，ZIP、比赛/姓名、数量/金额及测试 X 签名 PNG 全部通过。本轮使用已有文件夹授权，没有再次弹 Picker，也未测试另一位队员首次流程。
+
+生产 key 的只读元数据探测：正式站点 Referer 返回 200；两个本地 Referer 都被 403 / `API_KEY_HTTP_REFERRER_BLOCKED` 拒绝。OAuth 来源已保存并回读，Google 提示其传播可能延迟。GitHub 公开浏览器 key 告警未因此自动解决，不能把移除本地来源描述成密钥已撤销或告警已关闭。
 
 `index.html` 现在通过两个本地脚本加载新版配置和上传客户端；不再是运行时完全自包含的单文件。上传前把商品、姓名、比赛和签名取快照，避免用户等待 Google 授权时编辑导致文件名与表内内容错位。
 
