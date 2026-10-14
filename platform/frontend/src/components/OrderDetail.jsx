@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { actionLabels, Badge, fmtTime, isManager, safeLink } from '../display.jsx';
 
 function Purchase({ order, editable, busy, onMutate }) {
@@ -35,6 +35,19 @@ function Purchase({ order, editable, busy, onMutate }) {
 }
 
 function ReceiptForm({ order, batchId, busy, onMutate, onCancel }) {
+  const [quantities, setQuantities] = useState(() => Object.fromEntries(order.items.map(item => [item.id, '0'])));
+  const selectAll = useRef(null);
+  const eligible = order.items.filter(item => item.outstanding > 0);
+  const selectedCount = eligible.filter(item => Number(quantities[item.id]) > 0).length;
+  const allSelected = eligible.length > 0 && selectedCount === eligible.length;
+  const partlySelected = selectedCount > 0 && !allSelected;
+  useEffect(() => { selectAll.current.indeterminate = partlySelected; }, [partlySelected]);
+  function checkAll(checked) {
+    setQuantities(Object.fromEntries(order.items.map(item => [item.id, checked ? String(item.outstanding) : '0'])));
+  }
+  function checkItem(item, checked) {
+    setQuantities(previous => ({ ...previous, [item.id]: checked ? String(item.outstanding) : '0' }));
+  }
   function save(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -45,16 +58,24 @@ function ReceiptForm({ order, batchId, busy, onMutate, onCancel }) {
   return <form className="receipt-form" onSubmit={save}>
     <fieldset disabled={busy}>
       <p className="muted field">只填本次新收到、检查合格的数量。损坏或错货写在异常栏，后续补件再登记。累计不能超过已下单数量。</p>
+      <div className="actions receipt-selection">
+        <label><input ref={selectAll} type="checkbox" checked={allSelected} disabled={!eligible.length}
+          aria-checked={partlySelected ? 'mixed' : allSelected} onChange={event => checkAll(event.target.checked)} /> 一键全选</label>
+        <span className="muted">已勾选 {selectedCount} 项。勾选自动填满待验收数量；未到货的取消勾选，部分到货可修改数量。</span>
+      </div>
       <div className="table-scroll"><table>
-        <thead><tr><th>商品</th><th>待验收</th><th>本次合格数量</th><th>异常说明（可选）</th></tr></thead>
+        <thead><tr><th className="receipt-checkbox">已到货</th><th>商品</th><th>待验收</th><th>本次合格数量</th><th>异常说明（可选）</th></tr></thead>
         <tbody>{order.items.map(item => <tr key={item.id}>
+          <td className="receipt-checkbox"><input type="checkbox" checked={Number(quantities[item.id]) > 0}
+            disabled={item.outstanding <= 0} aria-label={`${item.name}已到货`} onChange={event => checkItem(item, event.target.checked)} /></td>
           <td>{item.name}</td><td>{item.outstanding}</td>
-          <td><input type="number" name={'q-' + item.id} defaultValue="0" min="0" max={item.outstanding}
+          <td><input type="number" name={'q-' + item.id} value={quantities[item.id]} min="0" max={item.outstanding}
+            onChange={event => setQuantities(previous => ({ ...previous, [item.id]: event.target.value }))}
             step="0.001" required aria-label={`${item.name}本次合格数量`} /></td>
           <td><input name={'issue-' + item.id} maxLength={1000} placeholder="缺件、错货、损坏" aria-label={`${item.name}异常说明`} /></td>
         </tr>)}</tbody>
       </table></div>
-      <div className="actions field"><button type="submit" className="primary">确认本次验收</button>
+      <div className="actions field"><button type="submit" className="primary">一键签收</button>
         <button type="button" onClick={onCancel}>取消</button></div>
     </fieldset>
   </form>;

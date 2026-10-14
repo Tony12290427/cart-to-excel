@@ -66,13 +66,13 @@ test('React UI handles purchasing, two deliveries and two students receiving ite
     await h.user.clear(input); await h.user.type(input, String(value));
   };
   await setQuantity('测试电机', 2); await setQuantity('测试接头', 5);
-  await h.click('确认本次验收');
+  await h.click('一键签收');
   await waitFor(() => expect(h.store.detail(h.id).status).toBe('partial_received')); await h.settle();
   expect(h.detail().getByText('测试电机 × 2；测试接头 × 5')).toBeTruthy();
   await h.click('切换演示身份'); await h.click('学生乙 · 演示'); await h.select();
   await h.click('领取并验收');
   await setQuantity('测试电机', 2); await setQuantity('测试接头', 5); await setQuantity('测试支架', 2);
-  await h.click('确认本次验收');
+  await h.click('一键签收');
   await waitFor(() => expect(h.store.detail(h.id).status).toBe('complete')); await h.settle();
   expect(h.detail().getByText('已到齐')).toBeTruthy();
   const order = h.store.detail(h.id);
@@ -95,6 +95,48 @@ test('filtering preserves an unsaved quantity; a stale submit refreshes rather t
   await waitFor(() => expect(screen.getByRole('status').textContent).toContain('订单已被其他人更新'));
   await waitFor(() => expect(screen.getByLabelText('测试电机已下单总数量').value).toBe('2'));
   expect(h.store.detail(h.id).items.map(item => item.ordered)).toEqual([2, 2, 2]);
+});
+
+test('bulk receipt selects remaining quantities, skips completed items and keeps unchecked missing goods outstanding', async () => {
+  const h = await setup();
+  const manager = h.store.user('demo-manager');
+  let order = h.store.classify(h.id, { version: h.store.detail(h.id).version, state: 'active' }, manager);
+  order = h.store.purchase(h.id, { version: order.version, lines: order.items.map(item => ({ itemId: item.id, quantity: item.requested })) }, manager);
+  order = h.store.addBatch(h.id, { version: order.version, arrived: true }, manager);
+  order = h.store.receive(h.id, { version: order.version, batchId: order.batches[0].id,
+    lines: order.items.map(item => ({ itemId: item.id, quantity: item.name === '测试电机' ? 1 : item.name === '测试支架' ? 2 : 0 })) }, h.store.user('demo-student'));
+  await h.click('学生乙 · 演示'); await h.select(); await h.click('补充验收');
+  expect(screen.getByLabelText('测试支架已到货').disabled).toBe(true);
+  const all = screen.getByLabelText('一键全选');
+  await h.user.click(all);
+  expect(screen.getByLabelText('测试电机本次合格数量').value).toBe('3');
+  expect(screen.getByLabelText('测试接头本次合格数量').value).toBe('10');
+  expect(screen.getByLabelText('测试支架本次合格数量').value).toBe('0');
+  await h.user.click(screen.getByLabelText('测试接头已到货'));
+  expect(screen.getByLabelText('测试接头本次合格数量').value).toBe('0');
+  expect(all.indeterminate).toBe(true);
+  const motor = screen.getByLabelText('测试电机本次合格数量');
+  await h.user.clear(motor); await h.user.type(motor, '2');
+  expect(screen.getByLabelText('测试电机已到货').checked).toBe(true);
+  await h.click('一键签收'); await h.settle();
+  order = h.store.detail(h.id);
+  expect(order.items.map(item => item.received)).toEqual([3, 0, 2]);
+  expect(order.items.map(item => item.outstanding)).toEqual([1, 10, 0]);
+  expect(order.receipts).toHaveLength(2);
+  expect(order.receipts[1].actor_id).toBe('demo-student-2');
+  expect(order.status).toBe('partial_received');
+  await h.click('补充验收');
+  await h.user.click(screen.getByLabelText('一键全选'));
+  expect(screen.getByLabelText('测试电机本次合格数量').value).toBe('1');
+  await h.user.click(screen.getByLabelText('一键全选'));
+  expect(screen.getByLabelText('测试电机本次合格数量').value).toBe('0');
+  expect(screen.getByLabelText('测试接头本次合格数量').value).toBe('0');
+  await h.user.type(screen.getByLabelText('测试接头异常说明'), '这批缺少接头');
+  await h.click('一键签收'); await h.settle();
+  order = h.store.detail(h.id);
+  expect(order.items.map(item => item.received)).toEqual([3, 0, 2]);
+  expect(order.issues[0].description).toBe('这批缺少接头');
+  expect(order.status).toBe('issue');
 });
 
 test('session expiry clears order data; admin role changes keep the member panel open', async () => {
