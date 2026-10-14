@@ -7,7 +7,9 @@
 
 ## 2026-10-14 接续更新 订单管理第一版
 
-新增独立 `platform/`：Node 22.22.2 + SQLite 后端、Google 登录和成员角色、Drive 只读定时同步、标准 XLSX / Google 表格导入、下单数量、到校批次、学生按 item 和数量验收、异常及可追溯更正。真实部署配置、启动和验收步骤见 [platform/README.md](platform/README.md)。原导出/上传网页保持现有机制。
+新增独立 `platform/`：React 19 + Vite 前端、Node 22.22.2 + SQLite 后端、Google 登录和成员角色、Drive 只读定时同步、标准 XLSX / Google 表格导入、下单数量、到校批次、学生按 item 和数量验收、异常及可追溯更正。真实部署配置、启动和验收步骤见 [platform/README.md](platform/README.md)。原导出/上传网页保持现有机制。
+
+用户要求管理平台前端采用 React，已将原 `platform/public/` 的拼接 HTML 页面迁移为 `platform/frontend/src/` 的 JSX 组件。`npm start` / `npm run demo` 自动构建；生产静态产物在被忽略的 `platform/dist/`，由同一 Node 服务提供。`npm run build:watch` 可监视前端修改并在原地址刷新预览。后台 API、数据库和 Google OAuth 来源不变；前端构建不加载后台 `.env`。Dockerfile 改为分阶段构建。前端流程测试使用内存数据库，实际订单不写入测试进度。
 
 已确认业务：管理方确认送到学校；所有获准团队学生都可领取并验收，记录实际操作人。通常整份表一起下单集运，支持分批及部分 item 未到。历史表先待核实，预算表可排除；未知真实进度不自动推定为已下单。
 

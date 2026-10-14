@@ -11,6 +11,7 @@ __pycache__/
 
 # Order platform runtime data and server credentials
 platform/node_modules/
+platform/**/node_modules/
 platform/data/
 platform/.env
 platform/.env.*
@@ -18,3 +19,5 @@ platform/.env.*
 platform/credentials/
 platform/*.sqlite*
 platform/coverage/
+platform/frontend/coverage/
+platform/dist/

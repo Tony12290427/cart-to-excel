@@ -2,6 +2,8 @@
 
 管理方记录已下单数量及送到学校的批次，团队学生领取后按商品和数量验收。原始 Excel / Google 表格继续保存在原来的 Drive 文件夹，状态及操作记录保存在独立 SQLite 数据库。
 
+前端使用 React 19 + Vite，后端使用 Node.js 内置 HTTP 服务与 SQLite。浏览器通过同源 `/api/` 接口访问后端，Google 登录和平台角色继续由后端验证。
+
 ## 当前验收状态
 
 - 本机演示完成：确认纳入、部分下单、补齐下单、第一批到校、学生甲部分验收、第二批到校、学生乙补齐验收、自动显示已到齐。
@@ -21,6 +23,18 @@ npm run demo
 ```
 
 演示打开 `http://127.0.0.1:8788`。可切换管理方、两名学生和管理员，演示数据全是虚构内容。演示数据库为 `data/demo.sqlite`；真实模式 `npm start` 使用 `http://127.0.0.1:8787` 和 `data/orders.sqlite`。两者使用不同会话 Cookie，避免身份互相覆盖。演示模式只能绑定本机地址，不能在正式模式启用，不能连接实际订单数据库。
+
+`npm start` 和 `npm run demo` 会先自动构建 React，再启动后端。开发时可在另一个终端运行 `npm run build:watch`，修改前端后刷新原来的页面即可；仍使用已配置的 8787/8788 来源，无需新增 OAuth 来源。直接运行 `node server.js` 或正式容器时，需要已有 `npm run build` 生成的 `dist/`。
+
+## 前端源码与构建
+
+- `frontend/src/App.jsx`：登录会话、接口调用、订单选择、忙碌状态与通知。
+- `frontend/src/components/`：登录、订单列表、订单详情及数量表单、成员管理。
+- `frontend/src/style.css`：原平台样式和响应式布局。
+- `vite.config.js`：JSX 编译和前端测试；生产输出到被忽略的 `dist/`，不读取后台 `.env`。
+- 后端只提供构建后的首页及 `/assets/` 下的 JS/CSS，不对外提供源码、数据库或后台配置。CSP、会话 Cookie 和 CSRF 检查保留。
+
+筛选和搜索不会重建数量表单；订单版本更新会清空旧版本草稿并展示新数量。409 冲突提示后重新读取订单，401 会清除页面订单数据并回到登录。成员角色保存后继续显示成员管理面板。
 
 ## 功能与数量含义
 
@@ -68,6 +82,7 @@ Drive 上的 `.xlsx` 用 `files.get?alt=media` 读取，原生 Google 表格用 
 
 - 本机真实验收：`npm start`，保持电脑及进程运行。
 - 团队正式使用：部署到有持久化磁盘的 Node 服务器/容器，单实例运行，配 HTTPS 反向代理和受控目录。提供了 Dockerfile；尚未实际构建或部署镜像。
+  Dockerfile 分阶段安装构建依赖、生成 React 页面，再将构建产物和正式运行依赖复制到运行镜像；不将后台 `.env` 或数据库放进镜像。
 - 设置 `NODE_ENV=production`、`PUBLIC_ORIGIN=https://实际管理平台域名`、`HOST=0.0.0.0`、持久化 `DB_PATH`、Google login Client ID、管理员 sub 和后台 ADC/读取身份。正式模式缺少 HTTPS / 登录 client / 管理员 sub 会拒绝启动。
 - SQLite 的 `DB_PATH` 必须在永久磁盘上。不要直接放在会重置临时文件系统的 Vercel Functions / Cloud Run 实例中，也不要用多实例各自一份数据库。若以后需要自动伸缩，再迁移共享数据库。
 - 后台常驻进程负责定时同步，浏览器关闭后仍会运行。进程停止会停止同步；恢复后重新扫描。页面显示最近同步时间及失败状态。
@@ -89,9 +104,11 @@ GOOGLE_APPLICATION_CREDENTIALS=/仓库外私有目录/order-form-reader.json
 
 ```sh
 npm test
-npm audit --omit=dev
+npm audit
 node tools/backup.mjs data/orders.sqlite /私有备份目录/orders-backup.sqlite
 ```
+
+`npm test` 先构建，再执行 Node 后端测试和 Vitest / Testing Library 前端流程测试。前端使用独立内存数据库，覆盖两批到货、两名学生逐项验收、草稿保留、版本冲突、会话过期和成员角色更新；另用 Google 组件桩验证登录回调及待批准成员限制，不冒充真实 Google 授权验收。不会写入实际订单。另有 HTTP 测试验证 React 产物与 CSP，并确认私有路径不可访问。
 
 备份工具使用 SQLite 的在线备份 API，可在后台运行时使用。备份完成后再将副本送入你管理的备份存储，实际数据与备份都不进 Git。
 

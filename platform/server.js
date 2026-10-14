@@ -45,7 +45,8 @@ export async function createApplication(options = {}) {
     activeSync = synchronize(store, reader).finally(() => { activeSync = null; });
     return activeSync;
   };
-  const assets = new Map([['/', ['index.html', 'text/html']], ['/app.js', ['app.js', 'text/javascript']], ['/style.css', ['style.css', 'text/css']]]);
+  const assets = path.join(root, 'dist');
+  const assetTypes = { '.js': 'text/javascript', '.css': 'text/css' };
   const json = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); };
   function session(req) {
     const raw = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith(COOKIE + '='))?.slice(COOKIE.length + 1);
@@ -75,9 +76,14 @@ export async function createApplication(options = {}) {
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; frame-src https://accounts.google.com; connect-src 'self' https://accounts.google.com; style-src 'self' https://accounts.google.com; img-src 'self' data:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'");
     try {
       const url = new URL(req.url, origin), p = url.pathname;
-      if (req.method === 'GET' && assets.has(p)) {
-        const [filename, type] = assets.get(p);
-        const content = await readFile(path.join(root, 'public', filename));
+      if (req.method === 'GET' && (p === '/' || /^\/assets\/[A-Za-z0-9_-]+\.(?:js|css)$/.test(p))) {
+        let content;
+        try { content = await readFile(path.join(assets, p === '/' ? 'index.html' : p.slice(1))); }
+        catch (error) {
+          if (error.code === 'ENOENT') fail(p === '/' ? 503 : 404, p === '/' ? '前端尚未构建，请先执行 npm run build' : '页面不存在');
+          throw error;
+        }
+        const type = p === '/' ? 'text/html' : assetTypes[path.extname(p)];
         res.writeHead(200, { 'Content-Type': type + '; charset=utf-8' }); return res.end(content);
       }
       if (!p.startsWith('/api/')) fail(404, '页面不存在');
