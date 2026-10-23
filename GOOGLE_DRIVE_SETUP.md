@@ -124,7 +124,7 @@ window.ORDER_FORM_DRIVE_CONFIG = {
 
 当前实现拒绝 Shared drive 的目标文件夹，因为 Shared drive 的文件归组织，而用户要求个人持有。团队目前使用的共享 My Drive 文件夹可以继续使用。
 
-重复提交只创建新文件，不覆盖或删除。Drive 允许同名文件并存；新版不尝试列举队友文件来计算 `(2)` 后缀。旧脚本的每日 50 次限制不适用于新版直接 API 上传。
+**Save to Drive / Save a copy to Drive** 只创建新文件，不覆盖或删除。**Update original** 才会在用户确认后更新已导入的同一文件。Drive 允许同名文件并存；创建副本时不尝试列举队友文件来计算 `(2)` 后缀。旧脚本的每日 50 次限制不适用于新版直接 API 上传。
 
 ## 7. 验收和回退
 
