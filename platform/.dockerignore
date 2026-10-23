@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+credentials
+.env
+.env.*
+*.sqlite*
+test
+README.md
