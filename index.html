@@ -7,7 +7,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="drive-config.js?v=drive-file-20261011"></script>
-<script src="drive-upload.js?v=order-import-20261023"></script>
+<script src="drive-upload.js?v=order-import-20261024"></script>
 <script src="order-import.js?v=20261023"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -105,6 +105,10 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
       <input id="input-order-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
     <p class="import-note">Open an existing order form to edit its items or add new ones. Sign the edited form before saving.</p>
+    <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;">Or paste a Drive file link / 粘贴链接导入</summary>
+      <label for="input-order-link" class="import-note" style="display:block;">Use this for files already accessible to this app. If the picker is blank, press Esc to close it.</label>
+      <div class="import-actions" style="margin-top:6px;"><input id="input-order-link" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" style="flex:1;min-width:220px;padding:9px;border:1px solid #ccc;border-radius:4px;" aria-label="Google Drive order form link"><button id="btn-import-link" type="button" disabled>Import link / 导入链接</button></div>
+    </details>
     <p id="import-status" class="import-note" role="status" aria-live="polite"></p>
     <p id="import-source" class="import-note" hidden></p>
   </section>
@@ -1164,6 +1168,8 @@ if (directDrive) {
 
 function refreshImportButtons() {
   document.getElementById('btn-import-drive').disabled = !directDriveReady || importBusy || driveBusy;
+  document.getElementById('btn-import-link').disabled = !directDriveReady || importBusy || driveBusy;
+  document.getElementById('input-order-link').disabled = importBusy || driveBusy;
   document.getElementById('btn-import-excel').disabled = importBusy || driveBusy;
   document.getElementById('btn-add-item').disabled = importBusy || driveBusy || items.length >= MAX_ITEMS;
   var locked = importBusy || originalSaveBusy;
@@ -1199,18 +1205,23 @@ async function applyImportedOrder(bytes, source) {
   showEditor();
 }
 
-function importFromDrive() {
+function importFromDrive(reference) {
   if (importBusy || driveBusy || !directDriveReady) return;
+  if (reference !== undefined) {
+    try { window.OrderFormDrive.fileReference(reference); }
+    catch (error) { setImportStatus(error.message, true); return; }
+  }
   var authorization = directDrive.authorize();
   importBusy = true; refreshImportButtons();
-  setImportStatus('Choose your Google account and an existing order form…');
-  authorization.then(function() { return directDrive.importFile(function(message) { setImportStatus(message); }); })
+  setImportStatus(reference ? 'Reading your Drive link…' : 'Choose an order form. If Google picker stays blank, press Esc and use the file-link option.');
+  authorization.then(function() { return directDrive.importFile(function(message) { setImportStatus(message); }, reference); })
     .then(function(result) { return applyImportedOrder(result.bytes, result.source); })
     .catch(function(error) { setImportStatus(error.message, error.code !== 'picker_cancelled'); })
     .finally(function() { importBusy = false; refreshImportButtons(); if (items.length) updateSummary(); });
 }
 
-document.getElementById('btn-import-drive').addEventListener('click', importFromDrive);
+document.getElementById('btn-import-drive').addEventListener('click', function() { importFromDrive(); });
+document.getElementById('btn-import-link').addEventListener('click', function() { importFromDrive(document.getElementById('input-order-link').value.trim()); });
 document.getElementById('btn-import-excel').addEventListener('click', function() { if (!importBusy && !driveBusy) document.getElementById('input-order-file').click(); });
 document.getElementById('input-order-file').addEventListener('change', async function(event) {
   var file = event.target.files && event.target.files[0];

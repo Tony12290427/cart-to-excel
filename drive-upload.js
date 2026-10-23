@@ -11,6 +11,18 @@
     return !!(config && config.clientId && config.apiKey && config.projectNumber && config.folderId);
   }
 
+  function fileReference(link) {
+    var url;
+    try { url = new URL(String(link).trim()); } catch (error) { throw new Error('Paste a Google Drive file or Google Sheets link.'); }
+    var match = url.hostname === 'docs.google.com' ? /^\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/.exec(url.pathname)
+      : url.hostname === 'drive.google.com' ? /^\/file\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]+)(?:\/|$)/.exec(url.pathname) : null;
+    var id = match ? match[1] : url.hostname === 'drive.google.com' && /^\/(?:open|uc)$/.test(url.pathname) ? url.searchParams.get('id') : '';
+    var key = url.searchParams.get('resourcekey') || '';
+    if (url.protocol !== 'https:' || url.username || url.password || !/^[A-Za-z0-9_-]{1,200}$/.test(id || '') || key && !/^[A-Za-z0-9_-]+$/.test(key))
+      throw new Error('Paste a Google Drive file or Google Sheets link.');
+    return { id: id, resourceKey: key };
+  }
+
   function createClient(config, runtime) {
     var env = runtime || root;
     var token = '';
@@ -215,11 +227,10 @@
           var types = XLSX_TYPE + ',' + SHEET_TYPE;
           var team = new env.google.picker.DocsView(env.google.picker.ViewId.DOCS)
             .setMimeTypes(types).setIncludeFolders(true).setSelectFolderEnabled(false).setParent(config.folderId);
-          var all = new env.google.picker.DocsView(env.google.picker.ViewId.DOCS).setMimeTypes(types);
           picker = new env.google.picker.PickerBuilder()
             .setDeveloperKey(config.apiKey).setAppId(String(config.projectNumber)).setOAuthToken(token)
             .setOrigin(env.location.origin).setTitle('Select an existing order form')
-            .addView(team).addView(all).setCallback(function(data) {
+            .addView(team).setCallback(function(data) {
               if (data.action === env.google.picker.Action.CANCEL) {
                 picker.setVisible(false);
                 reject(failure('Import cancelled. Your current items are unchanged.', 'picker_cancelled'));
@@ -237,12 +248,18 @@
       });
     }
 
-    async function importFile(status) {
+    async function importFile(status, reference) {
       requireToken();
       status = status || function() {};
-      var selected = await chooseOrderFile();
+      var selected = reference ? fileReference(reference) : await chooseOrderFile();
       status('Reading the selected order form…');
-      var source = await fileMetadata(selected);
+      var source;
+      try { source = await fileMetadata(selected); }
+      catch (error) {
+        if (reference && (error.status === 404 || error.reason === 'appNotAuthorizedToFile'))
+          throw failure('This app cannot read that file yet. Select it with the Google picker first, or import a downloaded Excel copy.', 'file_access');
+        throw error;
+      }
       if (source.id !== selected.id || source.trashed || [XLSX_TYPE, SHEET_TYPE].indexOf(source.mimeType) === -1)
         throw failure('Choose an Excel order form or Google spreadsheet.', 'file_type');
       if (source.capabilities && source.capabilities.canDownload === false) throw failure('This file does not allow downloading. Ask its owner for access.', 'file_permission');
@@ -384,7 +401,7 @@
     return { ready: ready, authorize: authorize, upload: upload, importFile: importFile, updateFile: updateFile, clearAccount: clearAccount };
   }
 
-  var api = { createClient: createClient, isConfigured: isConfigured, SCOPE: SCOPE };
+  var api = { createClient: createClient, isConfigured: isConfigured, SCOPE: SCOPE, fileReference: fileReference };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OrderFormDrive = api;
 })(typeof window !== 'undefined' ? window : globalThis);
