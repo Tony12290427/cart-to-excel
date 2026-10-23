@@ -26,6 +26,28 @@
 8. 点 **Export Excel**（三项必填齐全后才会亮起）→ 下载 `YYYYMMDD <Competition Name> order form.xlsx`
    （例如 `20260628 Go-Kart Extra order form.xlsx`；Competition 留空时是 `20260628 order form.xlsx`）。
 
+## 导入并修改已有订单
+
+1. 点击 **Import from Google Drive / 从 Drive 导入**，登录自己的 Google 账号，并在 Google Picker 中选择已有 `.xlsx` 或 Google 表格。也可用 **Import Excel** 读取本机副本。
+2. 页面显示商品名称、数量、单价、币种、位置、分类和链接，并带入比赛及学生姓名。可以直接编辑、删除，点击 **+ Add item** 手动新增，或继续粘贴购物车追加商品。当前草稿被替换前会确认；读取失败或取消不会清除草稿。
+3. **重新签名**后点击 **Update original / 更新原表**，有编辑权限时更新同一个 Drive 文件，文件名、位置、所有者和链接不改动。**Save a copy to Drive** 另建副本；**Export Excel** 下载到本机。
+
+保存前重新检查原文件版本与编辑权限。若别人已更新、文件被移除，或无法确认上次写入结果，要求重新导入，不自动重试覆盖。文件内容仅在浏览器内存中处理，沿用 `drive.file`，不申请整盘读取权限。
+
+标准 Excel 的其他工作表、未编辑区域和图片保留，签名区域替换为本次签名。修改过的条目重新标为 `Pending Approval`，未改动条目保留原状态；修改比赛或学生姓名时全部条目重新待审批。CNY/HKD/USD 分别保留与合计，不换算币种。原生 Google 表格通过 XLSX 导出和重新导入更新内容，Google 专属功能（例如评论）可能不保留，保存确认框会明确提示。
+
+当前支持标准 HKUST 表格、一个订单工作表、最多 30 项、文件不超过 5 MB、读取 XML 不超过 8 MB。多张订单表、单行多币种金额、无效数量或超限会提示，不能截断后覆盖原表。
+
+本机预览：`node tools/preview-order-form.cjs`，打开输出的地址。这个预览只提供网页公开资源，不提供后台数据库或 `.env`。生产 Google 客户端与 Picker key 不允许本地来源；本机只测试编辑/导出，真实 Drive 流程在已配置的正式来源或独立开发配置上验收，不放宽生产限制。
+
+开发检查（Node 22.22.2+）：
+
+```sh
+npm install --prefix /tmp/order-form-test-deps --no-save jszip@3.10.2 jsdom@30.1.2
+NODE_PATH=/tmp/order-form-test-deps/node_modules node --test tools/drive-upload.test.cjs tools/drive-import.test.cjs tools/order-import.test.cjs
+NODE_PATH=/tmp/order-form-test-deps/node_modules node tools/order-form-smoke.cjs
+```
+
 ## 关于数量（重要）
 
 淘宝购物车的数量是个**表单输入框**，浏览器复制选区时不会把表单控件的值写进剪贴板的

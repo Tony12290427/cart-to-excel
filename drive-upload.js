@@ -4,6 +4,8 @@
   var SCOPE = 'https://www.googleapis.com/auth/drive.file';
   var FOLDER_TYPE = 'application/vnd.google-apps.folder';
   var XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  var SHEET_TYPE = 'application/vnd.google-apps.spreadsheet';
+  var MAX_FILE_BYTES = 5 * 1024 * 1024;
 
   function isConfigured(config) {
     return !!(config && config.clientId && config.apiKey && config.projectNumber && config.folderId);
@@ -120,22 +122,27 @@
       });
     }
 
-    async function request(url, options) {
+    async function request(url, options, binary) {
       options = options || {};
+      options.cache = 'no-store';
       options.headers = Object.assign({}, options.headers, { Authorization: 'Bearer ' + token });
       var response;
       try {
         response = await env.fetch(url, options);
       } catch (error) {
-        throw failure(options.method === 'POST'
+        throw failure(options.method === 'PATCH'
+          ? 'Could not confirm the update. Re-import the original file before trying again.'
+          : options.method === 'POST'
           ? 'Could not confirm the upload. Check the Order Form folder before trying again.'
-          : 'Could not reach Google Drive. Check your connection and try again.', 'network');
+          : 'Could not reach Google Drive. Check your connection and try again.', options.method === 'PATCH' ? 'save_uncertain' : 'network');
       }
       var data;
-      try { data = await response.json(); } catch (ignored) { data = {}; }
+      if (!binary || !response.ok) {
+        try { data = await response.json(); } catch (ignored) { data = {}; }
+      }
       if (response.status === 401) {
         clearAccount();
-        throw failure('Your Google session expired. Click Save to Drive to sign in again.', 'auth_expired');
+        throw failure('Your Google session expired. Sign in again with a Drive button.', 'auth_expired');
       }
       if (!response.ok) {
         var reason = data.error && data.error.errors && data.error.errors[0] && data.error.errors[0].reason;
@@ -145,7 +152,9 @@
         } else if (reason === 'storageQuotaExceeded') {
           message = 'Your Google Drive storage is full. Free some space before uploading.';
         } else if (reason === 'insufficientFilePermissions') {
-          message = 'This Google account needs editor access to the team Order Form folder.';
+          message = 'This Google account does not have the required file or folder permission.';
+        } else if (response.status === 412) {
+          throw failure('The original file changed. Re-import it before updating.', 'source_changed');
         } else if (response.status === 429 || reason === 'rateLimitExceeded' || reason === 'userRateLimitExceeded') {
           message = 'Google Drive is busy. Please try again later.';
         }
@@ -154,7 +163,124 @@
         err.reason = reason;
         throw err;
       }
+      if (binary) {
+        var declared = response.headers && response.headers.get('Content-Length');
+        if (Number(declared) > MAX_FILE_BYTES) throw failure('Order forms must be 5 MB or smaller.', 'file_size');
+        if (response.body && response.body.getReader) {
+          var reader = response.body.getReader(), chunks = [], length = 0;
+          try {
+            while (true) {
+              var part = await reader.read();
+              if (part.done) break;
+              length += part.value.byteLength;
+              if (length > MAX_FILE_BYTES) { await reader.cancel(); throw failure('Order forms must be 5 MB or smaller.', 'file_size'); }
+              chunks.push(part.value);
+            }
+          } catch (error) { if (error.code) throw error; throw failure('Could not finish downloading the order form. Try importing again.', 'network'); }
+          var bytes = new Uint8Array(length), offset = 0;
+          chunks.forEach(function(chunk) { bytes.set(chunk, offset); offset += chunk.byteLength; });
+          return bytes.buffer;
+        }
+        var buffer = await response.arrayBuffer();
+        if (buffer.byteLength > MAX_FILE_BYTES) throw failure('Order forms must be 5 MB or smaller.', 'file_size');
+        return buffer;
+      }
+      if (data && response.headers && response.headers.get) data.etag = response.headers.get('ETag') || '';
       return data;
+    }
+
+    function requireToken() {
+      if (!token || Date.now() >= expiresAt) throw failure('Sign in again with a Drive button.', 'auth_expired');
+    }
+
+    function fileHeaders(source) {
+      return source.resourceKey ? { 'X-Goog-Drive-Resource-Keys': source.id + '/' + source.resourceKey } : {};
+    }
+
+    function fileMetadata(source) {
+      var fields = 'id,name,mimeType,size,version,modifiedTime,webViewLink,trashed,capabilities(canEdit,canDownload)';
+      return request('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(source.id)
+        + '?supportsAllDrives=true&fields=' + encodeURIComponent(fields), { headers: fileHeaders(source) });
+    }
+
+    function sameVersion(a, b) {
+      return !!a.version && !!b.version && String(a.version) === String(b.version)
+        && !!a.modifiedTime && a.modifiedTime === b.modifiedTime;
+    }
+
+    function chooseOrderFile() {
+      return new Promise(function(resolve, reject) {
+        var picker;
+        try {
+          var types = XLSX_TYPE + ',' + SHEET_TYPE;
+          var team = new env.google.picker.DocsView(env.google.picker.ViewId.DOCS)
+            .setMimeTypes(types).setIncludeFolders(true).setSelectFolderEnabled(false).setParent(config.folderId);
+          var all = new env.google.picker.DocsView(env.google.picker.ViewId.DOCS).setMimeTypes(types);
+          picker = new env.google.picker.PickerBuilder()
+            .setDeveloperKey(config.apiKey).setAppId(String(config.projectNumber)).setOAuthToken(token)
+            .setOrigin(env.location.origin).setTitle('Select an existing order form')
+            .addView(team).addView(all).setCallback(function(data) {
+              if (data.action === env.google.picker.Action.CANCEL) {
+                picker.setVisible(false);
+                reject(failure('Import cancelled. Your current items are unchanged.', 'picker_cancelled'));
+              } else if (data.action === env.google.picker.Action.PICKED) {
+                picker.setVisible(false);
+                var doc = data.docs && data.docs[0];
+                if (!doc || !/^[A-Za-z0-9_-]{1,200}$/.test(doc.id || '') ||
+                    (doc.resourceKey && !/^[A-Za-z0-9_-]+$/.test(doc.resourceKey))) {
+                  reject(failure('Choose an Excel order form or Google spreadsheet.', 'file_type'));
+                } else resolve({ id: doc.id, resourceKey: doc.resourceKey || '' });
+              }
+            }).build();
+          picker.setVisible(true);
+        } catch (error) { reject(failure('The order-form picker could not open. Try again.', 'picker_load')); }
+      });
+    }
+
+    async function importFile(status) {
+      requireToken();
+      status = status || function() {};
+      var selected = await chooseOrderFile();
+      status('Reading the selected order form…');
+      var source = await fileMetadata(selected);
+      if (source.id !== selected.id || source.trashed || [XLSX_TYPE, SHEET_TYPE].indexOf(source.mimeType) === -1)
+        throw failure('Choose an Excel order form or Google spreadsheet.', 'file_type');
+      if (source.capabilities && source.capabilities.canDownload === false) throw failure('This file does not allow downloading. Ask its owner for access.', 'file_permission');
+      if (Number(source.size) > MAX_FILE_BYTES) throw failure('Order forms must be 5 MB or smaller.', 'file_size');
+      source.resourceKey = selected.resourceKey;
+      var url = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(source.id);
+      url += source.mimeType === SHEET_TYPE ? '/export?mimeType=' + encodeURIComponent(XLSX_TYPE) : '?alt=media&supportsAllDrives=true';
+      var bytes = await request(url, { headers: fileHeaders(source) }, true);
+      var after = await fileMetadata(source);
+      if (!sameVersion(source, after)) throw failure('The file changed while downloading. Import it again.', 'source_changed');
+      return { source: Object.assign({}, after, { resourceKey: selected.resourceKey }), bytes: bytes };
+    }
+
+    async function updateFile(source, blob, status) {
+      requireToken();
+      if (!source || !/^[A-Za-z0-9_-]{1,200}$/.test(source.id || '') || [XLSX_TYPE, SHEET_TYPE].indexOf(source.mimeType) === -1)
+        throw failure('Import the original order form before updating.', 'file_type');
+      if (blob.size > MAX_FILE_BYTES) throw failure('Order forms must be 5 MB or smaller.', 'file_size');
+      var latest = await fileMetadata(source);
+      if (latest.trashed || latest.id !== source.id || latest.mimeType !== source.mimeType || !sameVersion(source, latest))
+        throw failure('The original file changed. Re-import it before updating.', 'source_changed');
+      if (!latest.capabilities || !latest.capabilities.canEdit) throw failure('You can read this file, but need editor access to update it. Save a copy instead.', 'file_permission');
+      (status || function() {})('Updating the original order form…');
+      var boundary = 'order_form_' + env.crypto.randomUUID().replace(/-/g, '');
+      var body = new env.Blob([
+        '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n',
+        JSON.stringify({ mimeType: source.mimeType }),
+        '\r\n--' + boundary + '\r\nContent-Type: ' + XLSX_TYPE + '\r\n\r\n', blob,
+        '\r\n--' + boundary + '--\r\n'
+      ], { type: 'multipart/related; boundary=' + boundary });
+      var headers = Object.assign({}, fileHeaders(source), { 'Content-Type': body.type });
+      if (latest.etag) headers['If-Match'] = latest.etag;
+      var result = await request('https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(source.id)
+        + '?uploadType=multipart&supportsAllDrives=true&fields=' + encodeURIComponent('id,name,mimeType,version,modifiedTime,webViewLink,capabilities(canEdit)'),
+        { method: 'PATCH', headers: headers, body: body });
+      if (result.id !== source.id) throw failure('Could not confirm the updated file. Re-import it before trying again.', 'save_uncertain');
+      result.resourceKey = source.resourceKey || '';
+      return result;
     }
 
     function folderMetadata() {
@@ -255,7 +381,7 @@
       };
     }
 
-    return { ready: ready, authorize: authorize, upload: upload, clearAccount: clearAccount };
+    return { ready: ready, authorize: authorize, upload: upload, importFile: importFile, updateFile: updateFile, clearAccount: clearAccount };
   }
 
   var api = { createClient: createClient, isConfigured: isConfigured, SCOPE: SCOPE };
