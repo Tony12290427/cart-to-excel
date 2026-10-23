@@ -1,5 +1,15 @@
 # Google Drive 新版上传配置
 
+## 2026-10-23 已有订单导入与原文件更新
+
+`drive-upload.js` 新增 Google Picker 选表、XLSX 下载 / 原生 Google 表格导出、同 ID 的 multipart `PATCH` 更新。继续只使用 `drive.file`，无需扩大 OAuth 范围，不修改已有生产来源或 key 的 API 限制。`order-import.js` 在浏览器解析并编辑原始工作簿；原文件名、位置和所有者不修改。
+
+更新前比较 `version` 和 `modifiedTime`，若 Google 暴露 ETag 则附 `If-Match`；412、版本变化和无法确认的写入会要求重新导入，不自动重试。未暴露 ETag 时这是保存前的版本检查，不能保证两次检查之间恰好发生的并发写入也被原子阻止，协作编辑应协调。
+
+Google 表格以 XLSX 往返更新，会替换整个文档内容，Google 专属功能可能丢失；UI 会在保存前提示。Excel 更新保留原 ZIP 中的其他工作表和非商品区域，签名替换为本次重新签名，变更条目回到 `Pending Approval`。
+
+已有读取/写入传输桩、真实模板往返和页面集成测试；真实 Google Picker 授权、共享表编辑权限和同 ID 云端保存仍须现场验收。不要把本机文件测试称为真实 Drive 更新成功，也不要为测试把本地来源加回生产配置。
+
 目标：用提交人的 Google 账号，把生成的 `.xlsx` 存进团队 `Order Form`；只申请非敏感的 `drive.file` 权限，完成公开发布和所需品牌验证后验收首次使用界面。
 
 ## 当前状态

@@ -7,7 +7,8 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="drive-config.js?v=drive-file-20261011"></script>
-<script src="drive-upload.js"></script>
+<script src="drive-upload.js?v=order-import-20261023"></script>
+<script src="order-import.js?v=20261023"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -53,6 +54,14 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 20px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1);
 }
+.import-box { background:#fff; border:1px solid #ddd; border-radius:8px; padding:16px 20px; margin-bottom:20px; }
+.import-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.import-actions button { padding:9px 14px; background:#fff; border:1px solid #4a90d9; color:#2464a4; border-radius:4px; cursor:pointer; font-size:14px; }
+.import-actions button:disabled { opacity:.5; cursor:not-allowed; }
+.import-note { font-size:12px; line-height:1.6; color:#666; margin-top:8px; }
+.editor-toolbar { display:flex; justify-content:space-between; gap:12px; align-items:center; flex-wrap:wrap; margin:18px 0 0; }
+.editor-toolbar button { background:#fff; border:1px solid #ccc; border-radius:4px; padding:8px 16px; cursor:pointer; }
+.edit-table .col-currency { width:85px; }
 @media (max-width: 768px) {
   body { padding: 10px; }
   .edit-table { font-size: 12px; }
@@ -89,6 +98,16 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     <div style="font-size:12px; color:#999; margin-top:6px;">Recorded on the Taobao cart page plus this tool ·
       To swap in a video hosted elsewhere, change the &lt;source&gt; above.</div>
   </details>
+  <section class="import-box" aria-label="Import an existing order form">
+    <div class="import-actions">
+      <button id="btn-import-drive" type="button" disabled>Import from Google Drive / 从 Drive 导入</button>
+      <button id="btn-import-excel" type="button">Import Excel / 导入本地表格</button>
+      <input id="input-order-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    </div>
+    <p class="import-note">Open an existing order form to edit its items or add new ones. Sign the edited form before saving.</p>
+    <p id="import-status" class="import-note" role="status" aria-live="polite"></p>
+    <p id="import-source" class="import-note" hidden></p>
+  </section>
   <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
     <div style="flex: 1; min-width: 200px;">
       <label style="font-size: 13px; color: #666;">Competition Name <span style="color:#c62828;">*</span></label>
@@ -118,6 +137,7 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     <div id="result-bar" class="result-bar" style="display:none;"></div>
   </div>
   <div id="editor-area" style="display:none;">
+    <div class="editor-toolbar"><span style="font-size:13px;color:#666;">Edit existing items or add a new row.</span><button id="btn-add-item" type="button">+ Add item / 新增商品</button></div>
     <div id="table-container"></div>
     <div id="paste-more" style="background:#fff; border:2px dashed #ccc; border-radius:8px; padding:14px 18px; margin-bottom:16px;">
       <div style="font-size:13px; color:#666; margin-bottom:6px;">📋 Paste more items here — they are added to the end of the list</div>
@@ -469,6 +489,9 @@ var DRIVE_UPLOAD_TOKEN = 'WOuz9Mtt9FfTFV9dX7H2QUrLEzSs';
 
 // === STATE ===
 let items = [];
+var importedOrder = null;
+var importBusy = false;
+var originalSaveBusy = false;
 
 // How many standalone quantity lines the last plain-text parse found.
 // 0 means the clipboard came straight from the cart page (no quantities in the
@@ -499,6 +522,7 @@ document.getElementById('btn-restart').addEventListener('click', clearAll);
 // the box under the table appends to the end of it.
 function handleCartPaste(e, append) {
   e.preventDefault();
+  if (importBusy || originalSaveBusy) return;
   const plainText = e.clipboardData.getData('text/plain');
   const html = e.clipboardData.getData('text/html');
 
@@ -573,7 +597,11 @@ function showError(msg) {
 }
 
 function clearAll() {
+  if (importBusy || originalSaveBusy) return;
   items = [];
+  importedOrder = null;
+  document.getElementById('import-source').hidden = true;
+  setImportStatus('');
   qtySource = '';
   pasteZone.style.display = 'block';
   pasteInput.value = '';
@@ -959,6 +987,12 @@ function workbookFilename() {
 }
 
 function requiredFieldsSatisfied() {
+  if (items.some(function(item) { return !item.name.trim() || !Number.isFinite(item.quantity) || item.quantity <= 0 || (item.price !== null && (!Number.isFinite(item.price) || item.price < 0)); })) {
+    alert('Check each item: name and a positive quantity are required, and prices cannot be negative.'); return false;
+  }
+  if (importedOrder && items.length > importedOrder.order.layout.end - importedOrder.order.layout.start + 1) {
+    alert('Too many items for this order form. Remove extra rows before exporting or saving.'); return false;
+  }
   var missing = missingRequiredFields();
   if (!missing.length) return true;
   updateSummary();
@@ -978,13 +1012,15 @@ function workbookSnapshot() {
     items: items.map(function(item) { return Object.assign({}, item); }),
     competition: document.getElementById('input-competition').value.trim(),
     student: document.getElementById('input-student').value.trim(),
-    signature: { dataUrl: signatureDataUrl, aspect: signatureAspect }
+    signature: { dataUrl: signatureDataUrl, aspect: signatureAspect },
+    imported: importedOrder
   };
 }
 
 function buildWorkbookBlob(snapshot) {
   try {
     snapshot = snapshot || workbookSnapshot();
+    if (snapshot.imported) return window.OrderFormImport.updateWorkbook(snapshot.imported, snapshot);
     var today = new Date();
     var dateStr = (today.getMonth()+1) + '/' + today.getDate() + '/' + today.getFullYear();
 
@@ -1019,9 +1055,9 @@ function buildWorkbookBlob(snapshot) {
             newRows += cellXML('E', r, item.link || '', false);
             newRows += cellXML('F', r, item.quantity, true);
             newRows += cellXML('G', r, item.category || 'Others', false);
-            newRows += cellXML('H', r, price * item.quantity, true);
-            newRows += cellXML('I', r, 0, true);
-            newRows += cellXML('J', r, 0, true);
+            newRows += cellXML('H', r, (item.currency || 'CNY') === 'CNY' ? price * item.quantity : 0, true);
+            newRows += cellXML('I', r, item.currency === 'HKD' ? price * item.quantity : 0, true);
+            newRows += cellXML('J', r, item.currency === 'USD' ? price * item.quantity : 0, true);
             newRows += cellXML('K', r, 'Pending Approval', false);
           } else {
             newRows += cellXML('A', r, '', false);
@@ -1115,13 +1151,109 @@ var directDrive = window.OrderFormDrive && window.OrderFormDrive.isConfigured(di
 if (directDrive) {
   directDrive.ready().then(function() {
     directDriveReady = true;
+    refreshImportButtons();
     if (items.length) updateSummary();
   }).catch(function(err) {
     setDriveStatus(err.message, '#c62828', '');
+    setImportStatus(err.message, true);
   });
 } else if (directDriveRequested) {
   driveStatusText = 'Google upload setup is incomplete. Contact the maintainer or use Export Excel.';
   driveStatusColor = '#c62828';
+}
+
+function refreshImportButtons() {
+  document.getElementById('btn-import-drive').disabled = !directDriveReady || importBusy || driveBusy;
+  document.getElementById('btn-import-excel').disabled = importBusy || driveBusy;
+  document.getElementById('btn-add-item').disabled = importBusy || driveBusy || items.length >= MAX_ITEMS;
+  var locked = importBusy || originalSaveBusy;
+  document.querySelectorAll('#table-container input, #table-container select, #input-competition, #input-student, #paste-input, #paste-input-more, #btn-restart, #btn-sign-undo, #btn-sign-clear, #btn-sign-upload, .btn-del').forEach(function(element) { element.disabled = locked; });
+  padEl().style.pointerEvents = locked ? 'none' : '';
+}
+
+function setImportStatus(message, error) {
+  var status = document.getElementById('import-status');
+  status.textContent = message;
+  status.style.color = error ? '#c62828' : '#666';
+}
+
+async function applyImportedOrder(bytes, source) {
+  var parsed = await window.OrderFormImport.readWorkbook(bytes);
+  if ((items.length || signatureDataUrl || document.getElementById('input-competition').value || document.getElementById('input-student').value) &&
+      !window.confirm('Replace the current editor with "' + source.name + '"? Your unsaved draft and signature will be cleared.')) {
+    setImportStatus('Import cancelled. Your current draft is unchanged.'); return;
+  }
+  var context = { bytes: bytes, order: parsed, source: source, needsReload: false };
+  items = parsed.items.map(function(item) { return Object.assign({}, item, { importId: item.id }); });
+  importedOrder = context;
+  document.getElementById('input-competition').value = parsed.competition;
+  document.getElementById('input-student').value = parsed.student;
+  padClear();
+  qtySource = '';
+  driveStatusText = ''; driveLinkUrl = '';
+  pasteZone.style.display = 'none'; resultBar.style.display = 'none';
+  document.getElementById('import-source').hidden = false;
+  document.getElementById('import-source').textContent = 'Editing: ' + source.name + (source.id ? ' · Update original keeps the same Drive file and link.' : ' · Local file: Save to Drive creates a new file.');
+  setImportStatus('Imported ' + items.length + ' items. Review the items and sign the edited form before saving.');
+  renderEditor();
+  showEditor();
+}
+
+function importFromDrive() {
+  if (importBusy || driveBusy || !directDriveReady) return;
+  var authorization = directDrive.authorize();
+  importBusy = true; refreshImportButtons();
+  setImportStatus('Choose your Google account and an existing order form…');
+  authorization.then(function() { return directDrive.importFile(function(message) { setImportStatus(message); }); })
+    .then(function(result) { return applyImportedOrder(result.bytes, result.source); })
+    .catch(function(error) { setImportStatus(error.message, error.code !== 'picker_cancelled'); })
+    .finally(function() { importBusy = false; refreshImportButtons(); if (items.length) updateSummary(); });
+}
+
+document.getElementById('btn-import-drive').addEventListener('click', importFromDrive);
+document.getElementById('btn-import-excel').addEventListener('click', function() { if (!importBusy && !driveBusy) document.getElementById('input-order-file').click(); });
+document.getElementById('input-order-file').addEventListener('change', async function(event) {
+  var file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file || importBusy || driveBusy) return;
+  importBusy = true; refreshImportButtons(); setImportStatus('Reading the selected order form…');
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('Order forms must be 5 MB or smaller.');
+    var bytes = await file.arrayBuffer();
+    await applyImportedOrder(bytes, { name: file.name });
+  } catch (error) { setImportStatus(error.message, true); }
+  finally { importBusy = false; refreshImportButtons(); if (items.length) updateSummary(); }
+});
+document.getElementById('btn-add-item').addEventListener('click', function() {
+  if (importBusy || driveBusy || items.length >= MAX_ITEMS) return;
+  items.push({ id: items.length + 1, name: '', spec: '', quantity: 1, price: null, currency: 'CNY', category: 'Others', link: '', location: 'Online' });
+  renderEditor();
+  var fields = document.querySelectorAll('.col-name-input'); fields[fields.length - 1].focus();
+});
+
+function updateOriginalInDrive() {
+  if (importBusy || driveBusy || !directDriveReady || !importedOrder || !importedOrder.source.id || importedOrder.needsReload || !requiredFieldsSatisfied()) return;
+  var context = importedOrder;
+  var extra = context.source.mimeType === 'application/vnd.google-apps.spreadsheet'
+    ? '\nGoogle Sheets contents will be replaced from the edited Excel workbook; Google-specific features such as comments may not be preserved.' : '';
+  if (!window.confirm('Update the original file "' + context.source.name + '" with these edits? Its Drive link will stay the same.' + extra)) return;
+  var authorization = directDrive.authorize(), snapshot = workbookSnapshot(), savedBytes, savedOrder;
+  driveBusy = true; originalSaveBusy = true; refreshImportButtons(); setDriveStatus('Preparing the edited original…', '#666', '');
+  authorization.then(function() { return buildWorkbookBlob(snapshot); }).then(async function(blob) {
+    savedBytes = await blob.arrayBuffer();
+    savedOrder = await window.OrderFormImport.readWorkbook(savedBytes);
+    return directDrive.updateFile(context.source, blob, function(message) { setDriveStatus(message, '#666'); });
+  }).then(function(result) {
+    if (importedOrder === context) {
+      importedOrder = { bytes: savedBytes, order: savedOrder, source: result, needsReload: !result.version || !result.modifiedTime };
+      items = savedOrder.items.map(function(item) { return Object.assign({}, item, { importId: item.id }); });
+      renderEditor();
+    }
+    setDriveStatus('✓ Updated original: ' + result.name, '#2e7d32', /^https:\/\/(docs|drive)\.google\.com\//.test(result.webViewLink || '') ? result.webViewLink : 'https://drive.google.com/file/d/' + encodeURIComponent(result.id) + '/view');
+  }).catch(function(error) {
+    if (['save_uncertain', 'source_changed'].indexOf(error.code) !== -1) context.needsReload = true;
+    setDriveStatus('⚠ ' + error.message, '#c62828', '');
+  }).finally(function() { driveBusy = false; originalSaveBusy = false; refreshImportButtons(); if (items.length) updateSummary(); });
 }
 
 function blobToBase64(blob) {
@@ -1188,12 +1320,13 @@ function uploadToDrive() {
 }
 
 function uploadWithGoogleAccount() {
-  if (driveBusy || !directDriveReady || items.length === 0 || !requiredFieldsSatisfied()) return;
+  if (importBusy || driveBusy || !directDriveReady || items.length === 0 || !requiredFieldsSatisfied()) return;
   // Google must open from this click, before workbook generation yields.
   var authorization = directDrive.authorize();
   var filename = workbookFilename();
   var snapshot = workbookSnapshot();
   driveBusy = true;
+  refreshImportButtons();
   setDriveStatus('Sign in with the Google account submitting this form…', '#666', '');
   authorization.then(function() {
     setDriveStatus('Preparing your order form…', '#666', '');
@@ -1210,6 +1343,7 @@ function uploadWithGoogleAccount() {
     setDriveStatus('⚠ ' + err.message, '#c62828', '');
   }).finally(function() {
     driveBusy = false;
+    refreshImportButtons();
     if (items.length) updateSummary();
   });
 }
@@ -1222,7 +1356,9 @@ function renderEditor() {
   html += '<th class="col-num">#</th>';
   html += '<th class="col-name">Item Name</th>';
   html += '<th class="col-qty">QTY</th>';
-  html += '<th class="col-price">¥</th>';
+  html += '<th class="col-price">Unit price</th>';
+  html += '<th class="col-currency">Currency</th>';
+  html += '<th>Location</th>';
   html += '<th class="col-type">Type</th>';
   html += '<th class="col-link">Link</th>';
   html += '<th class="col-del"></th>';
@@ -1233,16 +1369,18 @@ function renderEditor() {
       ? (item.name + ' (' + item.spec + ')')
       : item.name;
     var priceClass = item.price === null ? 'low-confidence' : '';
-    var categoryOptions = CATEGORIES.map(function(c) {
-      return '<option value="' + c + '"' + (c === item.category ? ' selected' : '') + '>' + c + '</option>';
+    var categoryOptions = (CATEGORIES.indexOf(item.category) < 0 ? [item.category].concat(CATEGORIES) : CATEGORIES).map(function(c) {
+      return '<option value="' + escAttr(c) + '"' + (c === item.category ? ' selected' : '') + '>' + escAttr(c) + '</option>';
     }).join('');
 
     var beyond = idx >= MAX_ITEMS;
     html += '<tr data-idx="' + idx + '"' + (beyond ? ' style="opacity:.55;" title="Past row 40 of the form — not exported"' : '') + '>';
     html += '<td class="col-num">' + (idx + 1) + (beyond ? ' ⚠' : '') + '</td>';
     html += '<td><input type="text" value="' + escAttr(displayName) + '" class="col-name-input" data-field="displayName"></td>';
-    html += '<td class="col-qty"><input type="number" value="' + item.quantity + '" min="1" data-field="quantity"></td>';
+    html += '<td class="col-qty"><input type="number" value="' + item.quantity + '" min="0.001" step="0.001" data-field="quantity"></td>';
     html += '<td class="col-price"><input type="text" value="' + (item.price !== null ? item.price : '') + '" class="' + priceClass + '" data-field="price"></td>';
+    html += '<td class="col-currency"><select data-field="currency">' + ['CNY', 'HKD', 'USD'].map(function(currency) { return '<option' + (currency === (item.currency || 'CNY') ? ' selected' : '') + '>' + currency + '</option>'; }).join('') + '</select></td>';
+    html += '<td><input type="text" value="' + escAttr(item.location || 'Online') + '" data-field="location" aria-label="Location for item ' + (idx + 1) + '"></td>';
     html += '<td class="col-type"><select data-field="category">' + categoryOptions + '</select></td>';
     html += '<td class="col-link"><input type="text" value="' + escAttr(item.link) + '" placeholder="Paste link" data-field="link"></td>';
     html += '<td class="col-del"><button class="btn-del" onclick="deleteItem(' + idx + ')" title="删除">&times;</button></td>';
@@ -1261,7 +1399,7 @@ function renderEditor() {
       var field = el.dataset.field;
       var value = el.value;
 
-      if (field === 'quantity') { value = parseInt(value, 10) || 1; }
+      if (field === 'quantity') { value = Number(value); }
       if (field === 'price') {
         value = parseFloat(value);
         if (isNaN(value)) value = null;
@@ -1282,6 +1420,7 @@ function renderEditor() {
   });
 
   updateSummary();
+  refreshImportButtons();
 }
 
 function escAttr(str) {
@@ -1291,7 +1430,7 @@ function escAttr(str) {
 function deleteItem(idx) {
   items.splice(idx, 1);
   items.forEach(function(item, i) { item.id = i + 1; });
-  if (items.length === 0) {
+  if (items.length === 0 && !importedOrder) {
     clearAll();
     return;
   }
@@ -1322,15 +1461,18 @@ function markMissingFields(missing) {
 function updateSummary() {
   var total = items.reduce(function(sum, i) { return sum + (i.price || 0) * (i.quantity || 1); }, 0);
   var over = items.length > MAX_ITEMS
-    ? ' <span style="color:#c62828;">· only the first ' + MAX_ITEMS + ' are written to the form ('
+    ? ' <span style="color:#c62828;">' + (importedOrder ? '· remove extra rows before saving (' : '· only the first ' + MAX_ITEMS + ' are written to the form (')
       + (items.length - MAX_ITEMS) + ' over the limit)</span>'
     : '';
   var missing = missingRequiredFields();
   var blocked = missing.length > 0;
   var driveEnabled = !!(directDriveRequested || DRIVE_UPLOAD_URL);
-  var driveBlocked = blocked || driveBusy || (directDriveRequested && !directDriveReady);
+  var driveBlocked = blocked || driveBusy || importBusy || (directDriveRequested && !directDriveReady);
+  var totals = {};
+  items.forEach(function(item) { var currency = item.currency || 'CNY'; totals[currency] = (totals[currency] || 0) + (item.price || 0) * (item.quantity || 0); });
+  var totalLabel = Object.keys(totals).map(function(currency) { return (currency === 'CNY' ? '¥' : currency + ' ') + totals[currency].toFixed(2); }).join(' + ');
   document.getElementById('summary-bar').innerHTML =
-    '<span>Total: ¥' + total.toFixed(2) + ' | ' + items.length + ' items' + over + '</span>' +
+    '<span>Total: ' + totalLabel + ' | ' + items.length + ' items' + over + '</span>' +
     '<span style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; justify-content:flex-end;">' +
       (blocked
         ? '<span style="color:#c62828; font-size:13px;">⚠ Fill in to export: ' + missing.join(', ') + '</span>'
@@ -1341,13 +1483,19 @@ function updateSummary() {
             (driveBlocked ? '#fff' : '#4a90d9') + '; border:1px solid ' +
             (driveBlocked ? '#bdbdbd' : '#4a90d9') + '; border-radius:4px; font-size:14px; cursor:' +
             (driveBlocked ? 'not-allowed' : 'pointer') + ';">'
-            + (driveBusy ? 'Saving…' : (directDrive && !directDriveReady && !driveStatusText ? 'Loading Google…' : 'Save to Drive')) + '</button>'
+            + (driveBusy ? 'Saving…' : (directDrive && !directDriveReady && !driveStatusText ? 'Loading Google…' : importedOrder ? 'Save a copy to Drive' : 'Save to Drive')) + '</button>'
+        : '') +
+      (directDrive && importedOrder && importedOrder.source.id
+        ? '<button id="btn-drive-update"' + (driveBlocked || importedOrder.needsReload || !importedOrder.source.capabilities || !importedOrder.source.capabilities.canEdit ? ' disabled' : '')
+          + ' style="padding:10px 18px;background:#4a90d9;color:#fff;border:0;border-radius:4px;cursor:pointer;">Update original / 更新原表</button>'
+          + (!importedOrder.source.capabilities || !importedOrder.source.capabilities.canEdit ? '<span style="font-size:12px;color:#666;">Editor access is required to update the original.</span>' : '')
+          + (importedOrder.needsReload ? '<span style="font-size:12px;color:#c62828;">Re-import the latest original before updating again.</span>' : '')
         : '') +
       (directDrive
         ? '<button id="btn-drive-account"' + (driveBusy || !directDriveReady ? ' disabled' : '')
           + ' style="background:transparent;border:0;color:#4a90d9;cursor:pointer;font-size:12px;">Switch Google account</button>'
         : '') +
-      '<button id="btn-export"' + (blocked ? ' disabled' : '') +
+      '<button id="btn-export"' + (blocked || importBusy || driveBusy ? ' disabled' : '') +
         ' style="padding:10px 24px; background:' + (blocked ? '#bdbdbd' : '#2e7d32') + '; color:#fff; border:none;' +
         ' border-radius:4px; font-size:15px; cursor:' + (blocked ? 'not-allowed' : 'pointer') + ';">Export Excel</button>' +
       (driveEnabled
@@ -1370,6 +1518,7 @@ function updateSummary() {
   if (driveEnabled) {
     document.getElementById('btn-drive').addEventListener('click', uploadToDrive);
   }
+  if (document.getElementById('btn-drive-update')) document.getElementById('btn-drive-update').addEventListener('click', updateOriginalInDrive);
   if (directDrive) {
     document.getElementById('btn-drive-account').addEventListener('click', function() {
       directDrive.clearAccount();
