@@ -22,6 +22,22 @@ async function fixture(options = {}) {
   if (options.entity) xml = xml.replace('<worksheet ', '<!DOCTYPE worksheet [<!ENTITY x "test">]><worksheet ');
   zip.file('xl/worksheets/sheet1.xml', xml);
   zip.file('customXml/preserve.xml', '<test>Keep this original data</test>');
+  if (options.signatureImage) {
+    const kind = options.signatureImage;
+    const marker = (tag, col, row, rowOff = 0) => `<xdr:${tag}><xdr:col>${col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${rowOff}</xdr:rowOff></xdr:${tag}>`;
+    const anchorType = kind === 'twoCell' ? 'twoCellAnchor' : kind === 'absolute' ? 'absoluteAnchor' : 'oneCellAnchor';
+    const origin = kind === 'absolute' ? '<xdr:pos x="18316575" y="15906750"/>'
+      : kind === 'outside' ? marker('from', 0, 0)
+      : kind === 'offset' ? marker('from', 7, 0, 15906750) : marker('from', 7, 69);
+    const size = kind === 'twoCell' ? marker('to', 9, 72) : `<xdr:ext cx="${kind === 'zeroSize' ? 0 : 1828800}" cy="457200"/>`;
+    const anchor = `<xdr:${anchorType} xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${origin}${size}<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="42" name="Picture 42"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdManualPicture"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:${anchorType}>`;
+    const drawingPath = 'xl/drawings/drawing1.xml', relsPath = 'xl/drawings/_rels/drawing1.xml.rels';
+    zip.file(drawingPath, (await zip.file(drawingPath).async('string')).replace(/<\/(?:\w+:)?wsDr>/, anchor + '$&'));
+    const target = kind === 'external' ? 'https://example.com/signature.png' : '../media/manual-picture.png';
+    const relationship = `<Relationship Id="rIdManualPicture" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}"${kind === 'external' ? ' TargetMode="External"' : ''}/>`;
+    zip.file(relsPath, (await zip.file(relsPath).async('string')).replace(/<\/(?:\w+:)?Relationships>/, relationship + '$&'));
+    if (!['missing', 'external'].includes(kind)) zip.file('xl/media/manual-picture.png', png.split(',')[1], {base64:true});
+  }
   if (options.inline) {
     const h = environment(), stringsDoc = new h.env.DOMParser().parseFromString(await zip.file('xl/sharedStrings.xml').async('string'), 'application/xml');
     const strings = [...stringsDoc.getElementsByTagName('si')].map(node => [...node.getElementsByTagName('t')].map(t => t.textContent).join(''));

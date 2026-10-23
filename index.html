@@ -8,7 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="drive-config.js?v=drive-file-20261011"></script>
 <script src="drive-upload.js?v=order-import-20261024"></script>
-<script src="order-import.js?v=20261023"></script>
+<script src="order-import.js?v=preserve-signature-20261024"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
@@ -83,7 +83,7 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
           down to <b>the end of the last one</b>, then press <b>Ctrl+C</b> (<b>Cmd+C</b> on Mac).
           Do <b>not</b> use Ctrl+A — selecting the whole page drags in the settlement panel and
           other parts the parser has no use for.</li>
-      <li>Sign below with your mouse or trackpad, or press <b>Upload image</b> to use a photo of your signature. <b>(required)</b></li>
+      <li>Sign below with your mouse or trackpad, or press <b>Upload image</b> to use a photo of your signature. <b>Required unless the imported form already has a signature image.</b></li>
       <li>Fill in <b>Competition Name</b> and <b>Student Name</b> <b>(required)</b> — they go into cells C3 and H66.</li>
       <li>Click into the paste box and press <b>Ctrl+V</b> — use the keyboard, not the right-click menu,
           otherwise the HTML flavour is dropped and item links and quantities are lost.</li>
@@ -104,7 +104,7 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
       <button id="btn-import-excel" type="button">Import Excel / 导入本地表格</button>
       <input id="input-order-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
     </div>
-    <p class="import-note">Open an existing order form to edit its items or add new ones. Sign the edited form before saving.</p>
+    <p class="import-note">Open an existing order form to edit its items or add new ones. An existing signature image is kept; no need to sign again.</p>
     <details style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;">Or paste a Drive file link / 粘贴链接导入</summary>
       <label for="input-order-link" class="import-note" style="display:block;">Use this for files already accessible to this app. If the picker is blank, press Esc to close it.</label>
       <div class="import-actions" style="margin-top:6px;"><input id="input-order-link" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" style="flex:1;min-width:220px;padding:9px;border:1px solid #ccc;border-radius:4px;" aria-label="Google Drive order form link"><button id="btn-import-link" type="button" disabled>Import link / 导入链接</button></div>
@@ -123,7 +123,8 @@ h1 { font-size: 1.5rem; margin-bottom: 20px; color: #1a1a1a; }
     </div>
   </div>
   <div id="signature-box" style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); padding:16px 20px; margin-bottom:20px;">
-    <label style="font-size:13px; color:#666;">Signature <span style="color:#c62828;">*</span> <span style="color:#aaa;">(required — sign below with your mouse or trackpad; it is written into the "Sign of student" cell)</span></label>
+    <label style="font-size:13px; color:#666;">Signature <span id="signature-required" style="color:#c62828;">*</span> <span id="signature-hint" style="color:#aaa;">(required — sign below with your mouse or trackpad; it is written into the "Sign of student" cell)</span></label>
+    <p id="existing-signature-note" hidden role="status" style="font-size:13px;color:#2e7d32;margin-top:8px;"></p>
     <canvas id="signature-pad" style="display:block; width:100%; margin-top:8px; border:1px dashed #ccc; border-radius:6px; background:#fff; touch-action:none; cursor:crosshair;"></canvas>
     <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center;">
       <button id="btn-sign-undo" style="padding:8px 16px; background:#fff; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:14px;">Undo</button>
@@ -604,6 +605,7 @@ function clearAll() {
   if (importBusy || originalSaveBusy) return;
   items = [];
   importedOrder = null;
+  syncSignatureNotice();
   document.getElementById('import-source').hidden = true;
   setImportStatus('');
   qtySource = '';
@@ -1200,7 +1202,9 @@ async function applyImportedOrder(bytes, source) {
   pasteZone.style.display = 'none'; resultBar.style.display = 'none';
   document.getElementById('import-source').hidden = false;
   document.getElementById('import-source').textContent = 'Editing: ' + source.name + (source.id ? ' · Update original keeps the same Drive file and link.' : ' · Local file: Save to Drive creates a new file.');
-  setImportStatus('Imported ' + items.length + ' items. Review the items and sign the edited form before saving.');
+  setImportStatus('Imported ' + items.length + ' items. ' + (parsed.hasSignature
+    ? 'Existing signature image found / 已识别原表签名图片。You can save without signing again.'
+    : 'Review the items and sign or upload a signature before saving.'));
   renderEditor();
   showEditor();
 }
@@ -1448,17 +1452,30 @@ function deleteItem(idx) {
   renderEditor();
 }
 
-// Competition name, student name and signature must all be present: they are
-// the parts of the form nobody can fill in for you afterwards.
+// A signature image already embedded in the imported form also satisfies this.
 function missingRequiredFields() {
   var missing = [];
   if (!document.getElementById('input-competition').value.trim()) missing.push('Competition Name');
   if (!document.getElementById('input-student').value.trim()) missing.push('Student Name');
-  if (!signatureDataUrl) missing.push('Signature');
+  if (!signatureDataUrl && !(importedOrder && importedOrder.order.hasSignature)) missing.push('Signature');
   return missing;
 }
 
+function syncSignatureNotice() {
+  var existing = !!(importedOrder && importedOrder.order.hasSignature);
+  document.getElementById('signature-required').hidden = existing;
+  document.getElementById('signature-hint').textContent = existing
+    ? '(optional — leave the pad empty to keep the original signature)'
+    : '(required — sign below with your mouse or trackpad; it is written into the "Sign of student" cell)';
+  var note = document.getElementById('existing-signature-note');
+  note.hidden = !existing;
+  note.textContent = existing ? (signatureDataUrl
+    ? 'The new signature will replace the original. Clear the pad to keep the original. / 将替换原签名；清空签名板可保留原签名。'
+    : 'Existing signature image will be kept. No need to sign again. / 将保留原表签名图片，无需重新签名。') : '';
+}
+
 function markMissingFields(missing) {
+  syncSignatureNotice();
   [['input-competition', 'Competition Name'], ['input-student', 'Student Name']].forEach(function(pair) {
     var el = document.getElementById(pair[0]);
     var lacking = missing.indexOf(pair[1]) >= 0;

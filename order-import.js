@@ -54,6 +54,71 @@
       && item.link === original.link && item.location === original.location;
   }
 
+  // Excel, Google Sheets and this page use different picture names/IDs. Locate
+  // pictures by their position in the standard student's signature area instead.
+  function signatureAnchors(draw, sheet) {
+    var format = one(sheet, 'sheetFormatPr');
+    var defaultHeight = Number(format && format.getAttribute('defaultRowHeight')) || 15;
+    var defaultWidth = Number(format && format.getAttribute('defaultColWidth')) || 8.43;
+    var rows = nodes(sheet, 'row'), cols = nodes(sheet, 'col'), y = [0], x = [0];
+    for (var r = 1; r <= 74; r++) {
+      var row = rows.find(function(n) { return Number(n.getAttribute('r')) === r; });
+      var height = row && row.hasAttribute('ht') ? Number(row.getAttribute('ht')) : defaultHeight;
+      y.push(y[r - 1] + (row && row.getAttribute('hidden') === '1' ? 0 : height * 12700));
+    }
+    for (var c = 1; c <= 12; c++) {
+      var col = cols.find(function(n) { return c >= Number(n.getAttribute('min')) && c <= Number(n.getAttribute('max')); });
+      var width = col && col.hasAttribute('width') ? Number(col.getAttribute('width')) : defaultWidth;
+      var pixels = width < 1 ? Math.floor(width * 12 + 0.5) : Math.floor(width * 7 + 5);
+      x.push(x[c - 1] + (col && col.getAttribute('hidden') === '1' ? 0 : pixels * 9525));
+    }
+    function marker(from, axis) {
+      var index = value(from, axis === x ? 'col' : 'row');
+      if (!/^\d+$/.test(index) || Number(index) >= axis.length) return NaN;
+      return axis[Number(index)] + Number(value(from, axis === x ? 'colOff' : 'rowOff') || 0);
+    }
+    return Array.from(draw.documentElement.children).filter(function(anchor) {
+      if (!one(anchor, 'pic')) return false;
+      var from = one(anchor, 'from'), to = one(anchor, 'to');
+      var pos = Array.from(anchor.children).find(function(n) { return n.localName === 'pos'; });
+      var ext = Array.from(anchor.children).find(function(n) { return n.localName === 'ext'; });
+      var left = from ? marker(from, x) : pos ? Number(pos.getAttribute('x')) : NaN;
+      var top = from ? marker(from, y) : pos ? Number(pos.getAttribute('y')) : NaN;
+      var right = to ? marker(to, x) : ext ? left + Number(ext.getAttribute('cx')) : NaN;
+      var bottom = to ? marker(to, y) : ext ? top + Number(ext.getAttribute('cy')) : NaN;
+      var centerX = (left + right) / 2, centerY = (top + bottom) / 2;
+      // G69:K73 includes a margin around H70, but excludes the name/date and
+      // header logos. Ignore empty template pictures and off-sheet drawings.
+      return right > left && bottom > top && centerX >= x[6] && centerX < x[11]
+        && centerY >= y[68] && centerY < y[73];
+    });
+  }
+
+  async function hasExistingSignature(zip, sheet, sheetPath, env, budget) {
+    var drawing = one(sheet, 'drawing');
+    if (!drawing || !zip.file(relPath(sheetPath))) return false;
+    var rels = await readXML(zip, relPath(sheetPath), env, budget);
+    var relation = nodes(rels, 'Relationship').find(function(r) {
+      return r.getAttribute('Id') === drawing.getAttributeNS(REL, 'id') && /\/drawing$/.test(r.getAttribute('Type') || '')
+        && r.getAttribute('TargetMode') !== 'External';
+    });
+    if (!relation) return false;
+    var drawingPath = path(sheetPath, relation.getAttribute('Target') || '');
+    if (!/^xl\/drawings\/[^/]+\.xml$/.test(drawingPath) || !zip.file(drawingPath) || !zip.file(relPath(drawingPath))) return false;
+    var draw = await readXML(zip, drawingPath, env, budget);
+    var drawRels = await readXML(zip, relPath(drawingPath), env, budget);
+    return signatureAnchors(draw, sheet).some(function(anchor) {
+      return nodes(anchor, 'blip').some(function(blip) {
+        var image = nodes(drawRels, 'Relationship').find(function(r) {
+          return r.getAttribute('Id') === blip.getAttributeNS(REL, 'embed') && /\/image$/.test(r.getAttribute('Type') || '')
+            && r.getAttribute('TargetMode') !== 'External';
+        });
+        var imagePath = image && path(drawingPath, image.getAttribute('Target') || '');
+        return !!(imagePath && /^xl\/media\/[^/]+$/.test(imagePath) && zip.file(imagePath));
+      });
+    });
+  }
+
   async function readWorkbook(bytes, runtime) {
     var env = runtime || root;
     if ((bytes.byteLength || bytes.length) > MAX_BYTES) throw new Error('Order forms must be 5 MB or smaller.');
@@ -144,6 +209,7 @@
       }
       if (!items.length) continue;
       results.push({ items: items, competition: get('C', 3), student: get('H', 66),
+        hasSignature: await hasExistingSignature(zip, doc, sheetPath, env, budget),
         layout: { sheetPath: sheetPath, start: header + 2, end: Math.min(header + 31, footer ? footer - 1 : header + 31), cols: cols, currencies: currencies } });
     }
     if (!results.length) throw new Error('No standard order-form items were found in this workbook.');
@@ -206,7 +272,11 @@
     });
     cell('C3', snapshot.competition); cell('H66', snapshot.student); cell('H74', date);
     nodes(doc, 'c').forEach(function(c) { if (one(c, 'f')) nodes(c, 'v').forEach(function(v) { v.remove(); }); });
-    await stampSignature(zip, doc, layout.sheetPath, snapshot.signature, env, budget);
+    if (snapshot.signature && snapshot.signature.dataUrl) {
+      await stampSignature(zip, doc, layout.sheetPath, snapshot.signature, env, budget);
+    } else if (!await hasExistingSignature(zip, doc, layout.sheetPath, env, budget)) {
+      throw new Error('No signature image was found in the student signature area. Sign or upload a signature before saving.');
+    }
     zip.file(layout.sheetPath, serializer.serializeToString(doc));
     var book = await readXML(zip, 'xl/workbook.xml', env, budget), calc = one(book, 'calcPr');
     if (!calc) { calc = book.createElementNS(NS, 'calcPr'); book.documentElement.appendChild(calc); }
@@ -234,12 +304,7 @@
     if (!/^xl\/drawings\/[^/]+\.xml$/.test(drawingPath)) throw new Error('This form uses an unsupported drawing layout.');
     var draw = zip.file(drawingPath) ? await readXML(zip, drawingPath, env, budget) : parse('<xdr:wsDr xmlns:xdr="' + XDR + '" xmlns:a="' + DRAW + '" xmlns:r="' + REL + '"/>', env);
     var drawingRelsPath = relPath(drawingPath), drawRels = zip.file(drawingRelsPath) ? await readXML(zip, drawingRelsPath, env, budget) : parse('<Relationships xmlns="' + PKG + '"/>', env);
-    Array.from(draw.documentElement.children).forEach(function(anchor) {
-      var from = one(anchor, 'from'), name = one(anchor, 'cNvPr');
-      if ((name && name.getAttribute('name') === 'signature.png') || (from && Number(value(from, 'row')) >= 65 && Number(value(from, 'row')) <= 73 && Number(value(from, 'col')) >= 6)) {
-        anchor.remove();
-      }
-    });
+    signatureAnchors(draw, sheet).forEach(function(anchor) { anchor.remove(); });
     var usedImages = new Set(nodes(draw, 'blip').map(function(blip) { return blip.getAttributeNS(REL, 'embed'); }));
     var unused = nodes(drawRels, 'Relationship').filter(function(r) { return /\/image$/.test(r.getAttribute('Type') || '') && !usedImages.has(r.getAttribute('Id')); });
     for (var image of unused) {

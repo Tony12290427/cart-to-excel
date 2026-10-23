@@ -18,6 +18,54 @@ for (const inline of [false,true]) test(`reads original items, totals as unit pr
     assert.deepEqual(order.items.map(item => [item.name,item.quantity,item.price,item.currency,item.location]), [['Test Motor',4,25,'CNY','Online'],['Test Cable',3,20,'HKD','Shop']]);
     assert.equal(order.items[1].category, 'Custom category');
     assert.equal(order.layout.end, 40);
+    assert.equal(order.hasSignature, false);
+  } finally { h.dom.window.close(); }
+});
+
+for (const signatureImage of ['oneCell', 'twoCell', 'absolute', 'offset']) test(`keeps an externally inserted ${signatureImage} picture signature without re-signing`, async () => {
+  const h = environment();
+  try {
+    const bytes = await fixture({signatureImage, renameSheet:true}), order = await importer.readWorkbook(bytes, h.env);
+    assert.equal(order.hasSignature, true);
+    const items = order.items.map(item => ({...item, importId:item.id})); items[0].quantity = 5;
+    const snapshot = {items, competition:order.competition, student:order.student};
+    const blob = await importer.updateWorkbook({bytes, order}, snapshot, h.env);
+    const saved = await blob.arrayBuffer(), parsed = await importer.readWorkbook(saved, h.env);
+    assert.equal(parsed.hasSignature, true); assert.equal(parsed.items[0].quantity, 5);
+    assert.equal(parsed.items[0].status, 'Pending Approval');
+    const before = await JSZip.loadAsync(bytes), after = await JSZip.loadAsync(saved);
+    const retained = Object.keys(before.files).filter(name => !before.files[name].dir &&
+      (/^xl\/(drawings|media)\//.test(name) || /\/worksheets\/_rels\//.test(name) || name === '[Content_Types].xml'));
+    for (const name of retained) assert.deepEqual(await after.file(name).async('nodebuffer'), await before.file(name).async('nodebuffer'), name);
+    assert.equal(Object.keys(after.files).filter(name => /order-edit-signature/.test(name)).length, 0);
+    const again = await importer.updateWorkbook({bytes:saved,order:parsed}, {...snapshot,items:parsed.items.map(item=>({...item,importId:item.id})),signature:{dataUrl:null}}, h.env);
+    assert.equal((await importer.readWorkbook(await again.arrayBuffer(), h.env)).hasSignature, true);
+  } finally { h.dom.window.close(); }
+});
+
+for (const signatureImage of [undefined, 'outside', 'missing', 'external', 'zeroSize']) test(`requires a signature when no usable signature-area image exists: ${signatureImage}`, async () => {
+  const h = environment();
+  try {
+    const bytes = await fixture({signatureImage}), order = await importer.readWorkbook(bytes, h.env);
+    assert.equal(order.hasSignature, false);
+    // The writer rechecks the workbook instead of trusting a cached UI flag.
+    await assert.rejects(importer.updateWorkbook({bytes,order:{...order,hasSignature:true}}, {
+      items:order.items.map(item=>({...item,importId:item.id})),competition:order.competition,student:order.student,
+    }, h.env), /No signature image/);
+  } finally { h.dom.window.close(); }
+});
+
+test('a supplied new signature replaces a manually inserted picture and preserves header images', async () => {
+  const h = environment();
+  try {
+    const bytes = await fixture({signatureImage:'twoCell'}), order = await importer.readWorkbook(bytes, h.env);
+    const blob = await importer.updateWorkbook({bytes,order}, {items:order.items.map(item=>({...item,importId:item.id})),competition:order.competition,student:order.student,signature:{dataUrl:png,aspect:4}}, h.env);
+    const after = await JSZip.loadAsync(await blob.arrayBuffer()), before = await JSZip.loadAsync(bytes);
+    const drawing = await after.file('xl/drawings/drawing1.xml').async('string');
+    assert.doesNotMatch(drawing, /Picture 42/); assert.equal((drawing.match(/name="signature.png"/g)||[]).length,1);
+    assert.equal(after.file('xl/media/manual-picture.png'),null);
+    for (const name of ['xl/media/image1.png','xl/media/image2.png']) assert.deepEqual(await after.file(name).async('nodebuffer'),await before.file(name).async('nodebuffer'));
+    assert.equal((await importer.readWorkbook(await blob.arrayBuffer(),h.env)).hasSignature,true);
   } finally { h.dom.window.close(); }
 });
 
@@ -99,6 +147,31 @@ test('page imports, renders hostile text safely, adds/edits rows and updates onl
     assert.equal(h.writes.length,1);assert.equal(h.writes[0].source.id,'existing-order');
     const env=environment();try{const order=await importer.readWorkbook(await h.writes[0].blob.arrayBuffer(),env.env);assert.equal(order.items[2].amount,8);}finally{env.dom.window.close();}
     assert.match(h.w.document.getElementById('drive-status').textContent,/Updated original/);
+  }finally{h.dom.window.close();}
+});
+
+test('page updates an original with its own picture signature, and clearing the optional pad keeps it',async()=>{
+  const h=await browserPage({signatureImage:'twoCell'});try{
+    h.w.document.getElementById('btn-import-drive').click();await h.until(()=>h.w.testState().items.length===2);
+    assert.equal(h.w.testState().signatureDataUrl,null);
+    assert.equal(h.w.document.getElementById('btn-drive-update').disabled,false);
+    assert.equal(h.w.document.getElementById('btn-export').disabled,false);
+    assert.equal(h.w.document.getElementById('signature-required').hidden,true);
+    assert.match(h.w.document.getElementById('existing-signature-note').textContent,/无需重新签名/);
+    h.w.testSign();assert.match(h.w.document.getElementById('existing-signature-note').textContent,/will replace/);
+    h.w.document.getElementById('btn-sign-clear').click();
+    assert.equal(h.w.testState().signatureDataUrl,null);
+    assert.equal(h.w.document.getElementById('btn-drive-update').disabled,false);
+    h.w.document.getElementById('btn-drive-update').click();
+    await h.until(()=>h.w.testState().importedOrder?.source.version==='8');
+    assert.equal(h.writes.length,1);assert.equal(h.writes[0].source.id,'existing-order');
+    const zip=await JSZip.loadAsync(await h.writes[0].blob.arrayBuffer());
+    assert.match(await zip.file('xl/drawings/drawing1.xml').async('string'),/Picture 42/);
+    assert.equal(Object.keys(zip.files).filter(name=>/order-edit-signature/.test(name)).length,0);
+    h.w.clearAll();
+    assert.equal(h.w.document.getElementById('existing-signature-note').hidden,true);
+    assert.equal(h.w.document.getElementById('signature-required').hidden,false);
+    assert.ok(h.w.missingRequiredFields().includes('Signature'));
   }finally{h.dom.window.close();}
 });
 
