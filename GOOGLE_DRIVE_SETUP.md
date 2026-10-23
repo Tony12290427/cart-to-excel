@@ -1,5 +1,15 @@
 # Google Drive 新版上传配置
 
+## 2026-10-23 已有订单导入与原文件更新
+
+`drive-upload.js` 新增 Google Picker 选表、XLSX 下载 / 原生 Google 表格导出、同 ID 的 multipart `PATCH` 更新。继续只使用 `drive.file`，无需扩大 OAuth 范围，不修改已有生产来源或 key 的 API 限制。`order-import.js` 在浏览器解析并编辑原始工作簿；原文件名、位置和所有者不修改。
+
+更新前比较 `version` 和 `modifiedTime`，若 Google 暴露 ETag 则附 `If-Match`；412、版本变化和无法确认的写入会要求重新导入，不自动重试。未暴露 ETag 时这是保存前的版本检查，不能保证两次检查之间恰好发生的并发写入也被原子阻止，协作编辑应协调。
+
+Google 表格以 XLSX 往返更新，会替换整个文档内容，Google 专属功能可能丢失；UI 会在保存前提示。Excel 更新保留原 ZIP 中的其他工作表和非商品区域，签名替换为本次重新签名，变更条目回到 `Pending Approval`。
+
+已有读取/写入传输桩、真实模板往返和页面集成测试；真实 Google Picker 授权、共享表编辑权限和同 ID 云端保存仍须现场验收。不要把本机文件测试称为真实 Drive 更新成功，也不要为测试把本地来源加回生产配置。
+
 目标：用提交人的 Google 账号，把生成的 `.xlsx` 存进团队 `Order Form`；只申请非敏感的 `drive.file` 权限，完成公开发布和所需品牌验证后验收首次使用界面。
 
 ## 当前状态
@@ -21,6 +31,9 @@
 - 回读测试文件确认目标 parent ID、xlsx MIME 和 63,239 字节完整 ZIP；C3/H66/F11/H11 值及签名 PNG 均正确。
 - Google 验证中心明确显示：因未请求任何敏感或受限范围，无需数据访问验证。品牌显示的验证属于另一项，当前没有宣称通过 Google 品牌审核。
 - 已测试账号为维护者账号；尚未用另一个队员账号做首次流程验收。
+- 生产 Picker key 和 Web OAuth 客户端已移除 `http://localhost:8765`、`http://127.0.0.1:49530` 两个测试来源，保存后重新打开 Console 核对。OAuth 只保留 Vercel / GitHub Pages；key 额外保留 Picker 所需的 `https://docs.google.com/*`，API 仍只允许 Drive / Picker。
+- 收紧后从 `https://cart-to-excel.vercel.app` 重新选择当前 Google 账号，真实保存 `20261011 TEST production restrictions order form.xlsx` 到固定 `Order Form` 文件夹，Google 返回所有者为当前账号。文件 ID：`1N_FWv--8ffxLWWXwNlxWlN1E_Sxbshwn`；下载回读 63,252 字节，ZIP、C3/H66、数量/金额和测试 X 签名 PNG 正确。此账号此前已授予文件夹权限，所以本轮没有再次弹 Picker；不是另一位队员的首次使用验收。
+- 用同一生产 key 只读请求本轮公开 TEST 文件元数据：正式站点 Referer 返回 200；两个本地 Referer 均返回 403 / `API_KEY_HTTP_REFERRER_BLOCKED`，确认 key 的新网站限制已生效。OAuth 本地来源的移除通过 Console 保存和回读核对；Google 提示配置传播可能延迟。
 
 ## 1. 在同一个 Google Cloud 项目中准备
 
@@ -61,8 +74,6 @@ Authorized JavaScript origins 是 **origin**，没有路径、没有末尾 `/`�
 ```text
 https://cart-to-excel.vercel.app
 https://tony12290427.github.io
-http://localhost:8765
-http://127.0.0.1:49530
 ```
 
 如果改用自有域名，也把该 origin 加入。GitHub Pages 项目路径 `/cart-to-excel/` 不应写进 origin。使用 GIS token popup，无需 OAuth redirect URI，也无需客户端 secret。
@@ -78,8 +89,6 @@ APIs & Services → Credentials → Create credentials → API key。
 ```text
 https://cart-to-excel.vercel.app/*
 https://tony12290427.github.io/*
-http://localhost:8765/*
-http://127.0.0.1:49530/*
 https://docs.google.com/*
 ```
 
@@ -115,7 +124,7 @@ window.ORDER_FORM_DRIVE_CONFIG = {
 
 当前实现拒绝 Shared drive 的目标文件夹，因为 Shared drive 的文件归组织，而用户要求个人持有。团队目前使用的共享 My Drive 文件夹可以继续使用。
 
-重复提交只创建新文件，不覆盖或删除。Drive 允许同名文件并存；新版不尝试列举队友文件来计算 `(2)` 后缀。旧脚本的每日 50 次限制不适用于新版直接 API 上传。
+**Save to Drive / Save a copy to Drive** 只创建新文件，不覆盖或删除。**Update original** 才会在用户确认后更新已导入的同一文件。Drive 允许同名文件并存；创建副本时不尝试列举队友文件来计算 `(2)` 后缀。旧脚本的每日 50 次限制不适用于新版直接 API 上传。
 
 ## 7. 验收和回退
 
@@ -127,7 +136,9 @@ NODE_PATH=/tmp/cart-to-excel-check/node_modules node tools/order-form-smoke.cjs
 python3 -m http.server 8765
 ```
 
-浏览器打开 `http://localhost:8765`（需先在 Google OAuth origin 配好此地址）。检查：首次界面、正确文件夹、真实 `.xlsx` 内容、签名、所有者、正常取消及重名并存。至少再用一个未授权过的队员账号测试，确认正常授权流程没有“未经验证／不安全”警告。
+浏览器打开 `http://localhost:8765` 可检查解析、签名和本地 Excel 导出。生产 OAuth 客户端和 Picker key 不允许本地来源；本地真实 Google 上传应使用独立的开发客户端和受限制的开发 key，不要把本地地址重新加入生产配置，也不要把开发配置提交到正式站点。
+
+真实上传验收从正式站点进行。检查：首次界面、正确文件夹、真实 `.xlsx` 内容、签名、所有者、正常取消及重名并存。至少再用一个未授权过的队员账号测试，确认正常授权流程没有“未经验证／不安全”警告。
 
 清空 `clientId`、`apiKey` 和 `projectNumber` 三项即可回到现有 Apps Script；旧端点留在 `index.html`。它仍会显示原有授权警告。新版实测通过之前不要删除旧部署。
 

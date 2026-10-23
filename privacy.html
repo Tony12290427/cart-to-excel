@@ -9,17 +9,19 @@
 <body><main>
   <a href="index.html">← Cart to Order Form</a>
   <h1>Privacy / 隐私说明</h1>
-  <p>Updated / 更新日期：11 October 2026</p>
+  <p>Updated / 更新日期：23 October 2026</p>
   <p>Cart to Order Form helps HKUST Robotics Team members turn shopping-cart information into an order-form Excel file. Maintainer: Tony, <a href="mailto:tony20051229@gmail.com">tony20051229@gmail.com</a>.</p>
   <p>本工具帮助 HKUST Robotics Team 队员把购物车内容整理成订购表 Excel。维护者：Tony，联系邮箱见上方。</p>
 
   <h2>Your form / 你的表格</h2>
   <p>Cart text, product links, prices, quantities, competition name, student name and signature are processed in your browser. Export Excel saves the file locally. Save to Drive sends the completed workbook, including the signature, to Google Drive in the team's Order Form folder. People who have access to that folder can access the uploaded form according to its sharing settings.</p>
   <p>购物车文字、商品链接、价格、数量、比赛名称、学生姓名和签名在浏览器中处理。本地导出会下载文件；选择上传时，完整表格（包括签名）会发送到 Google Drive 的团队 Order Form 文件夹，有相应共享权限的人可以访问。</p>
+  <p>Import from Google Drive reads only the workbook you explicitly select with Google Picker. Its items, amounts, currencies and form fields are processed in page memory. Update original sends the edited workbook back to the same file when you have editor access; Save a copy creates a new file. Google Sheets updates replace contents through Excel conversion and may not preserve Google-specific features. Import Excel reads a local file and does not upload it until you choose a Drive save action. Existing signatures are not reused; sign the edited form before saving.</p>
+  <p>从 Drive 导入只读取你在 Google Picker 明确选择的工作簿，在页面内存中处理商品、金额、币种和表格字段。有编辑权限时“更新原表”把编辑后的内容写回同一文件；“另存副本”创建新文件。原生 Google 表格更新经过 Excel 转换，Google 专属功能可能不保留。本机导入不会自动上传，只有选择 Drive 保存操作才发送。导入后需要重新签名，不沿用原签名。</p>
 
   <h2>Google access / Google 授权</h2>
-  <p>The direct Drive API upload requests <code>drive.file</code>: access to files created by this app or explicitly selected for this app, including the target folder. It reads the target folder's name and write capability, creates a workbook there, and reads the new file's link and owner display name to show the result. The app does not request access to all of your Drive files in this mode.</p>
-  <p>新版直接上传使用 <code>drive.file</code> 权限，只涉及工具创建或你明确选择给工具使用的文件及目标文件夹。工具读取目标文件夹的名称和写入权限，创建表格，并读取新文件的链接和所有者显示名称来展示结果。</p>
+  <p>The direct Drive integration requests <code>drive.file</code>: access to files created by this app or explicitly selected for this app, including the target folder. It reads selected file contents and versions, checks permissions, creates workbooks or updates the selected original, and reads file links and owner display names to show the result. The app does not request access to all of your Drive files in this mode.</p>
+  <p>新版直接上传与导入使用 <code>drive.file</code> 权限，只涉及工具创建或你明确选择给工具使用的文件及目标文件夹。工具读取文件/文件夹名称、内容、版本及权限，按你的操作创建表格或更新所选文件，并读取文件链接和所有者显示名称来展示结果。</p>
   <p>During the transition, if direct upload has not been configured, Save to Drive uses the existing Google Apps Script deployment. That deployment requests broader Drive access and processes the workbook on Google's Apps Script servers before creating the file in the same team folder. Google shows the permissions for the active upload method before you grant access.</p>
   <p>迁移期间，新版未启用时仍使用原有 Apps Script 上传。该方式申请较广的 Drive 权限，在 Google 的 Apps Script 服务中处理表格后存入同一团队文件夹。授权前请查看 Google 显示的实际权限。</p>
 
