@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { webcrypto } = require('node:crypto');
-const { createClient, SCOPE } = require('../drive-upload.js');
+const { createClient, SCOPE, fileReference } = require('../drive-upload.js');
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const SHEET = 'application/vnd.google-apps.spreadsheet';
 const config = { clientId: 'client', apiKey: 'key', projectNumber: '123', folderId: 'team-folder', folderName: 'Order Form' };
@@ -64,6 +64,14 @@ for (const native of [false, true]) test(`Picker reads selected ${native ? 'Goog
   assert.match(h.requests[1].url, native ? /\/export\?mimeType=/ : /alt=media/);
   assert.equal(h.requests[1].headers['X-Goog-Drive-Resource-Keys'], 'order-file/resource-key');
   assert.equal(h.requests.some(request => request.method), false);
+});
+
+test('link import reads only a validated Google file ID without opening Picker', async () => {
+  assert.deepEqual(fileReference('https://docs.google.com/spreadsheets/d/order-file/edit?resourcekey=resource-key'),{id:'order-file',resourceKey:'resource-key'});
+  for(const link of ['https://evil.example/file/d/order-file','https://drive.google.com.evil.example/file/d/order-file','http://drive.google.com/file/d/order-file','https://drive.google.com/drive/folders/team-folder'])assert.throws(()=>fileReference(link));
+  const h=await harness();const result=await h.client.importFile(undefined,'https://drive.google.com/file/d/order-file/view');
+  assert.equal(result.source.id,'order-file');assert.equal(h.settings.views,undefined);
+  assert.equal(h.requests.some(request=>request.method),false);
 });
 
 for (const native of [false, true]) test(`update ${native ? 'native Sheet' : 'XLSX'} uses the same ID, no rename/move, and a conditional PATCH`, async () => {

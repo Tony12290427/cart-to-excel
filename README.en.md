@@ -4,6 +4,8 @@
 
 Use **Import from Google Drive** to select an existing XLSX or Google spreadsheet with Google Picker. The editor loads its items, quantities, unit prices, CNY/HKD/USD currencies, locations, categories, links, competition and student name. Edit rows, remove items or use **+ Add item** to add a row. Local XLSX import is also available.
 
+If Picker stays blank, press Esc and use **Import link** for a file this app already has access to. Link import validates the Google URL and uses the same drive.file permissions; it cannot bypass access restrictions.
+
 Sign the edited form, then choose **Update original** to update the same Drive file, or **Save a copy to Drive** / **Export Excel** for a copy. Original updates require editor access, check the current source version and do not rename or move the file. Failed or cancelled imports preserve the draft; conflicting or uncertain updates require re-importing. Only `drive.file` is requested.
 
 The original XLSX workbook's other worksheets and untouched areas are retained. Edited items require approval again; unchanged items retain their status unless the competition/student changed. Google Sheets updates replace contents through an XLSX roundtrip, which may lose Google-specific features such as comments; the save confirmation explains this. Standard HKUST forms with one order sheet, up to 30 items and a file size up to 5 MB are supported; unsupported data is rejected rather than truncated.
