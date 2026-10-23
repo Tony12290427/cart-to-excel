@@ -6,9 +6,9 @@ Use **Import from Google Drive** to select an existing XLSX or Google spreadshee
 
 If Picker stays blank, press Esc and use **Import link** for a file this app already has access to. Link import validates the Google URL and uses the same drive.file permissions; it cannot bypass access restrictions.
 
-Sign the edited form, then choose **Update original** to update the same Drive file, or **Save a copy to Drive** / **Export Excel** for a copy. Original updates require editor access, check the current source version and do not rename or move the file. Failed or cancelled imports preserve the draft; conflicting or uncertain updates require re-importing. Only `drive.file` is requested.
+If the imported form already has an embedded image in the student's signature area, it is kept and you can save without signing again. This includes pictures manually inserted in Excel or Google Sheets, regardless of their name or upload source. If no image is found, draw or upload a signature. A new signature replaces the original; clearing the pad keeps the original. Choose **Update original** to update the same Drive file, or **Save a copy to Drive** / **Export Excel** for a copy. Original updates require editor access, check the current source version and do not rename or move the file. Failed or cancelled imports preserve the draft; conflicting or uncertain updates require re-importing. Only `drive.file` is requested.
 
-The original XLSX workbook's other worksheets and untouched areas are retained. Edited items require approval again; unchanged items retain their status unless the competition/student changed. Google Sheets updates replace contents through an XLSX roundtrip, which may lose Google-specific features such as comments; the save confirmation explains this. Standard HKUST forms with one order sheet, up to 30 items and a file size up to 5 MB are supported; unsupported data is rejected rather than truncated.
+The original XLSX workbook's other worksheets and untouched areas are retained. Without a new signature, drawing parts, image relationships and image bytes remain unchanged. Signature detection uses the standard signature area's position (one-cell, two-cell or absolute image anchors), and does not authenticate the signer. Edited items require approval again; unchanged items retain their status unless the competition/student changed. Google Sheets updates replace contents through an XLSX roundtrip, which may lose Google-specific features such as comments; the save confirmation explains this. Standard HKUST forms with one order sheet, up to 30 items and a file size up to 5 MB are supported; unsupported data is rejected rather than truncated.
 
 [中文](README.md) | **English**
 
@@ -63,7 +63,7 @@ There are two ways to get the quantities:
 If the result bar shows no `QTY from clipboard HTML` and every row is 1, neither path worked —
 go through Notes once.
 
-## Signature (optional)
+## Signature
 
 Sign **directly with the mouse or trackpad** in the Signature row at the top of
 the page (touch and stylus work too):
